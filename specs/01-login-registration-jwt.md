@@ -1,6 +1,6 @@
 # SPEC 01 — Login and registration with JWT session
 
-> **Status:** Draft
+> **Status:** Approved
 > **Depends on:** None (first spec in this repo)
 > **Date:** 2026-07-26
 > **Objective:** Implement email/password registration and login screens, backed by the `api/v1/auth` endpoints, that persist the JWT securely, protect routes behind it, and support logout.
