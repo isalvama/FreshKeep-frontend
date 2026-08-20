@@ -1,11 +1,20 @@
 # Auth API Contract
 
 Source: `AuthController` (`modules/account/infrastructure/web`), `AppSecurityConfiguration`,
-`SpringSecurityConfiguration`, `GlobalExceptionHandler`, `JwtAuthenticationFilter`.
+`SpringSecurityConfiguration`, `GlobalExceptionHandler`, `JwtAuthenticationFilter`,
+`JwtTokenGeneratorAdapter`, `IdentityResolverService`.
 
 Base path: `api/v1/auth`
 
 All three endpoints consume/produce `application/json`.
+
+---
+
+## ⚠️ Breaking changes for existing frontend integrations
+
+1. **`register/user` and `register/admin` no longer return a JWT.** They now return `{ accountId, email }` only — no `jwtString`, no `expiresIn`. If the current frontend auto-logs-in a user right after registration using the token from the register response, that will break: **the client must now call `POST /api/v1/auth/login` as a separate step right after a successful registration** to obtain a session token.
+2. **Login's JWT now carries two extra claims**: `userId` and `adminId` (see [JWT claims](#jwt-claims)). If the frontend decodes the token client-side, these are now available — `userId`/`adminId` are `null` in the claim when the account doesn't have the corresponding role.
+3. **Admin login is currently non-functional.** Any account with the `ADMIN` role will always fail `POST /login` with a `500` (see [Known limitation](#known-limitation-admin-login-always-fails)). This includes the account created via `register/admin`. Do not build/test an admin-facing flow against this yet.
 
 ---
 
@@ -34,13 +43,11 @@ All three endpoints consume/produce `application/json`.
 ```json
 {
   "accountId": "b3f1c9a0-....",
-  "email": "user@example.com",
-  "jwtString": "eyJhbGciOi...",
-  "expiresIn": 3600000
+  "email": "user@example.com"
 }
 ```
 
-`expiresIn` is the raw `jwt.expiration` value (milliseconds) used to build the token, not a computed remaining time.
+No token is returned. Call `POST /api/v1/auth/login` afterward to obtain one.
 
 ### Error responses
 
@@ -61,9 +68,11 @@ Same request/response/error shapes as **Register — User**, with two difference
 - `Location` header points to `/api/v1/admins/{accountId}`.
 - The created account is granted the `ADMIN` role instead of `USER`.
 
+Same as above: the response contains only `{ accountId, email }`, no token. Note the [known limitation](#known-limitation-admin-login-always-fails) — the admin account this creates cannot currently log in.
+
 ### Access control
 
-Enforced both at the filter-chain level (`/api/v1/auth/register/admin` → `hasRole('ADMIN')`) and via `@PreAuthorize("hasRole('ADMIN')")` on `AuthController.registerAdmin`. A caller must already be authenticated **as an ADMIN** (valid `Bearer` JWT with the `ADMIN` role) to reach this endpoint.
+Enforced via `@PreAuthorize("hasRole('ADMIN')")` on `AuthController.registerAdmin`. A caller must already be authenticated **as an ADMIN** (valid `Bearer` JWT with the `ADMIN` role) to reach this endpoint.
 
 Additional error cases — see [Security & access control](#security--access-control) for details:
 
@@ -100,7 +109,22 @@ Same shape/constraints as registration:
 }
 ```
 
+`expiresIn` is the raw `jwt.expiration` value (milliseconds) used to build the token, not a computed remaining time.
+
 Login also updates the account's `lastLogIn` timestamp as a side effect (`accountRepositoryPort.updateLastLogIn`).
+
+### JWT claims
+
+Decoding `jwtString` (e.g. for client-side identity checks) now yields:
+
+| Claim | Type | Notes |
+|-------|------|-------|
+| `sub` | string | account email |
+| `roles` | string[] | e.g. `["USER"]`, without the `ROLE_` prefix |
+| `accountId` | string (UUID) | the authenticating `Account`'s id |
+| `userId` | string (UUID) or `null` | present only if the account has the `USER` role; resolved from the `user` module at login time |
+| `adminId` | string (UUID) or `null` | present only if the account has the `ADMIN` role — see limitation below |
+| `iat` / `exp` | number | issued-at / expiration (epoch ms) |
 
 ### Error responses
 
@@ -111,6 +135,13 @@ Login also updates the account's `lastLogIn` timestamp as a side effect (`accoun
 | 401 Unauthorized | Wrong email or password (`InvalidCredentialsException`, thrown by `AuthenticationAdapter` for any `AuthenticationException`, e.g. `BadCredentialsException`/unknown user) | "Unauthorized Error" |
 | 403 Forbidden | Account exists but is disabled (`DisabledAccountException`, from Spring Security's `DisabledException`) | "Forbidden Request" |
 | 500 Internal Server Error | Authentication succeeded but the principal couldn't be mapped (`IdentityMappingException`) | "Server Error" |
+| 500 Internal Server Error | Account has the `USER` role but no matching `User` record exists yet (`UserProvisioningPendingException`) — should not happen under normal operation | "Server Error" |
+| 500 Internal Server Error | Account has the `ADMIN` role (`AdminProvisioningPendingException`) — **always thrown today**, see below | "Server Error" |
+| 500 Internal Server Error | Both `userId` and `adminId` resolved to nothing (`InvalidResolvedEntitiesException`) — should not happen under normal operation | "Server Error" |
+
+#### Known limitation: admin login always fails
+
+`IdentityResolverService` resolves `userId`/`adminId` from the account's roles before building the login token. The `ADMIN` side of that resolution (`AdminIdentityLookUpAdapter`) is currently a placeholder with no real admin-provisioning module behind it yet — it unconditionally throws `AdminProvisioningPendingException`. **Any login attempt for an account with the `ADMIN` role will fail with `500` until the admin module is implemented.** This has no workaround on the frontend side; it's a backend gap.
 
 ---
 
@@ -138,7 +169,7 @@ Validation errors additionally include an `errors` property: `{ "field": "messag
 | `ForbiddenException` (incl. `DisabledAccountException`) | `DomainException` | 403 |
 | `ConflictException` (incl. `AccountAlreadyExistsException`) | `DomainException` | 409 |
 | `DomainException` (any other) | `FreshKeepException` | 400 |
-| `InfrastructureException` (incl. `IdentityMappingException`) | `FreshKeepException` | 500 |
+| `InfrastructureException` (incl. `IdentityMappingException`, `UserProvisioningPendingException`, `AdminProvisioningPendingException`, `InvalidResolvedEntitiesException`) | `FreshKeepException` | 500 |
 | `MethodArgumentNotValidException` / `ConstraintViolationException` | — | 400 |
 | `HttpMessageNotReadableException` | — | 400 |
 | `MethodArgumentTypeMismatchException` | — | 400 |
@@ -184,7 +215,7 @@ The specific `register/admin` matcher is declared *before* the broader `/api/v1/
 
 For `register/admin` specifically:
 
-- No `Authorization` header, or an invalid/expired/malformed bearer token → the filter chain's `hasRole('ADMIN')` check has no authentication to evaluate → **401** via `CustomAuthenticationEntryPoint`.
+- No `Authorization` header, or an invalid/expired/malformed bearer token → no authentication for `@PreAuthorize` to evaluate → **401** via `CustomAuthenticationEntryPoint`.
 - Valid bearer token, but the account's role is not `ADMIN` → authenticated but denied → **403** via `CustomAccessDeniedHandler`.
 
 Any other route not matched above (i.e. anything outside `/api/v1/auth/**`) requires a valid, non-anonymous authentication (`anyRequest().authenticated()`); missing/invalid tokens there also produce 401 via the entry point.

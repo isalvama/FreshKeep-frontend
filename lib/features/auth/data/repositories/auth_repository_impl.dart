@@ -20,12 +20,18 @@ class AuthRepositoryImpl implements AuthRepository {
   });
 
   @override
-  Future<Either<AuthFailure, User>> register(String email, String password) {
-    return _authenticate(
-      () => remoteDataSource.register(
+  Future<Either<AuthFailure, User>> register(
+    String email,
+    String password,
+  ) async {
+    try {
+      final response = await remoteDataSource.register(
         AuthRequestModel(email: email, password: password),
-      ),
-    );
+      );
+      return Right(response.toUserModel());
+    } on DioException catch (e) {
+      return Left(_mapDioException(e));
+    }
   }
 
   @override

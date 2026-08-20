@@ -1,7 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/usecases/register_usecase.dart';
-import 'auth_bloc.dart';
 import 'form_status.dart';
 
 class RegisterSubmitted {
@@ -13,10 +12,8 @@ class RegisterSubmitted {
 
 class RegisterBloc extends Bloc<RegisterSubmitted, FormStatus> {
   final RegisterUseCase registerUseCase;
-  final AuthBloc authBloc;
 
-  RegisterBloc({required this.registerUseCase, required this.authBloc})
-      : super(const FormInitial()) {
+  RegisterBloc({required this.registerUseCase}) : super(const FormInitial()) {
     on<RegisterSubmitted>(_onSubmitted);
   }
 
@@ -28,10 +25,7 @@ class RegisterBloc extends Bloc<RegisterSubmitted, FormStatus> {
     final result = await registerUseCase(event.email, event.password);
     result.match(
       (failure) => emit(FormFailure(failure.message)),
-      (user) {
-        authBloc.add(LoggedIn(user));
-        emit(FormSuccess(user));
-      },
+      (user) => emit(FormSuccess(user)),
     );
   }
 }
