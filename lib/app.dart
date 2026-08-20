@@ -52,7 +52,6 @@ class App extends StatelessWidget {
         BlocProvider<RegisterBloc>(
           create: (_) => RegisterBloc(
             registerUseCase: RegisterUseCase(authRepository),
-            authBloc: authBloc,
           ),
         ),
       ],

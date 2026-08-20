@@ -1,6 +1,6 @@
 # SPEC 02 — Registration response without auto-login
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 01 (login-registration-jwt)
 > **Date:** 2026-08-20
 > **Objective:** Adapt the frontend registration flow to the backend's new response shape (`{ accountId, email }`, no token) by removing auto-login on registration and instead redirecting to the Login screen with a success message.

@@ -72,8 +72,15 @@ class _RegisterPageState extends State<RegisterPage> {
             );
           } else if (state is FormSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Account created')),
+              const SnackBar(
+                content: Text(
+                  'Account created successfully! Please log in to continue.',
+                ),
+              ),
             );
+            Future.delayed(const Duration(seconds: 2), () {
+              if (context.mounted) context.go('/login');
+            });
           }
         },
         child: Padding(
