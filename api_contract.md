@@ -219,3 +219,108 @@ For `register/admin` specifically:
 - Valid bearer token, but the account's role is not `ADMIN` → authenticated but denied → **403** via `CustomAccessDeniedHandler`.
 
 Any other route not matched above (i.e. anything outside `/api/v1/auth/**`) requires a valid, non-anonymous authentication (`anyRequest().authenticated()`); missing/invalid tokens there also produce 401 via the entry point.
+
+---
+
+# Space API Contract
+
+Source: `SpaceController` (`modules/space/infrastructure/web`), `CreateSpaceService`, `Space`/`StorageSpot`/`Emoji` domain
+models, `JpaSpaceRepositoryAdapter`.
+
+Base path: `api/v1/spaces`
+
+Requires authentication (see [Security & access control](#security--access-control-1)) — every endpoint below needs a
+valid `Bearer` JWT for an account with the `USER` role, obtained via `POST /api/v1/auth/login`.
+
+---
+
+## 1. Create Space
+
+`POST /api/v1/spaces`
+
+### Request body (`CreateSpaceRequest`)
+
+```json
+{
+  "spaceName": "Kitchen",
+  "emoji": "🏠",
+  "storageSpots": [
+    { "name": "Main Shelf", "type": "SHELF" }
+  ]
+}
+```
+
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `spaceName` | string | required (`@NotBlank`), max 20 characters |
+| `emoji` | string | required (`@NotBlank`), 1–8 characters. Also validated at the domain layer (`Emoji`): must consist only of actual emoji codepoints (letters/digits/plain text are rejected) |
+| `storageSpots` | array of `StorageSpotRequest` | required, non-empty (`@NotEmpty`), cascade-validated (`@Valid`) |
+
+`StorageSpotRequest`:
+
+| Field | Type | Constraints |
+|-------|------|-------------|
+| `name` | string | required (`@NotBlank`), max 30 characters |
+| `type` | string | required (`@NotBlank`), must be one of: `FRIDGE`, `FREEZER`, `PANTRY`, `FRUIT_BOWL`, `WINE_CELLAR`, `COUNTERTOP`, `SHELF` |
+
+Two storage spots with the same `name` **and** `type` are rejected (see [error responses](#error-responses-1)) —
+same name with a different type, or same type with a different name, is allowed.
+
+`creatorId` is **not** part of the request body — it's resolved server-side from the authenticated principal's
+`userId` claim (`@AuthenticationPrincipal(expression = "userId")`), the same claim documented under
+[JWT claims](#jwt-claims) above.
+
+### Success response — `201 Created`
+
+`Location` header: `/api/v1/spaces/{id}`
+
+```json
+{
+  "id": "b3f1c9a0-....",
+  "spaceName": "Kitchen",
+  "storageSpots": [
+    { "storageSpotId": "c4a2d8b1-....", "storageSpotName": "Main Shelf", "storageSpotType": "SHELF" }
+  ],
+  "creatorId": "d5b3e9c2-....",
+  "participantIds": ["d5b3e9c2-...."]
+}
+```
+
+On creation, `participantIds` always contains exactly the creator's `userId` — there's no way to add other
+participants at creation time yet.
+
+⚠️ **The response does not echo back the submitted `emoji`.** `Space`'s `emoji` is persisted, but `SpaceResult`/
+`SpaceResponse` currently omit it entirely — the frontend must hold onto the value it submitted locally rather than
+expect it back from this endpoint.
+
+### Error responses
+
+| Status | Condition | Body (`ProblemDetail`) title |
+|--------|-----------|-------------------------------|
+| 400 Bad Request | Any field fails bean validation (`spaceName`/`emoji`/`storageSpots` blank/missing/too long/empty, a storage spot's `name`/`type` blank/too long/not a recognized type) | "Validation Error In Body Data" (+ `errors` map). Nested storage-spot errors use bracketed keys, e.g. `errors["storageSpots[0].name"]` — **not** a nested JSON structure, so client code must access it as a flat map key containing literal `[` `]` characters |
+| 400 Bad Request | Malformed/missing JSON body | "Message Not Readable" |
+| 400 Bad Request | `spaceName` has no letters, `emoji` fails domain-level emoji validation, a storage spot `name` has no letters, or two storage spots share the same `name`+`type` (`InvalidSpaceNameException` / `InvalidEmojiException` / `InvalidStorageSpotName` / `InvalidSpaceException`) | "Business Rule Error" |
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+| 500 Internal Server Error | Persistence failure (e.g. DB constraint violation, connection issue) wrapped as `SpacePersistenceException` | "Server Error" |
+
+Note: when a storage spot's `type` is blank, it simultaneously fails both `@NotBlank` and the custom `@EnumValue`
+constraint. Since `errors` is a flat map keyed by field name, only one of the two messages survives (whichever
+Hibernate Validator evaluates last for that field) — don't rely on the exact wording of that specific message; rely
+on the field key (`errors["storageSpots[0].type"]`) being present.
+
+---
+
+## Security & access control {#security--access-control-1}
+
+Enforced via `@PreAuthorize("hasRole('USER')")` on `SpaceController.create` — there is no URL-level rule for
+`/api/v1/spaces/**` in `AppSecurityConfiguration`, so it falls under the default `anyRequest().authenticated()` at
+the filter-chain level, with the role check happening at the method-security layer.
+
+| Endpoint | Filter chain | Method security | Net effect |
+|----------|--------------|------------------|------------|
+| `POST /api/v1/spaces` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
+
+Failure handling matches the rest of the API (see [Failure handling for authorization](#failure-handling-for-authorization)):
+no/invalid token → 401 via `CustomAuthenticationEntryPoint`; valid token without the `USER` role → 403 via
+`CustomAccessDeniedHandler`.
