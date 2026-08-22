@@ -27,3 +27,29 @@ class ServerFailure extends AuthFailure {
 class NetworkFailure extends AuthFailure {
   const NetworkFailure(super.message); // no connectivity / timeout
 }
+
+sealed class SpaceFailure {
+  final String message;
+
+  const SpaceFailure(this.message);
+}
+
+class SpaceValidationFailure extends SpaceFailure {
+  const SpaceValidationFailure(super.message); // 400 (field or business-rule)
+}
+
+class SpaceUnauthorizedFailure extends SpaceFailure {
+  const SpaceUnauthorizedFailure(super.message); // 401
+}
+
+class SpaceForbiddenFailure extends SpaceFailure {
+  const SpaceForbiddenFailure(super.message); // 403
+}
+
+class SpaceServerFailure extends SpaceFailure {
+  const SpaceServerFailure(super.message); // 500
+}
+
+class SpaceNetworkFailure extends SpaceFailure {
+  const SpaceNetworkFailure(super.message); // no connectivity / timeout
+}
