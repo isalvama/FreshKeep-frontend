@@ -8,6 +8,9 @@ import '../features/auth/presentation/pages/home_page.dart';
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/pages/register_page.dart';
 import '../features/auth/presentation/pages/splash_page.dart';
+import '../features/spaces/presentation/pages/create_space_result.dart';
+import '../features/spaces/presentation/pages/new_space_page.dart';
+import '../features/spaces/presentation/pages/space_status_page.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
   late final StreamSubscription<dynamic> _subscription;
@@ -36,6 +39,15 @@ GoRouter buildAppRouter(AuthBloc authBloc) {
         builder: (context, state) => const RegisterPage(),
       ),
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+      GoRoute(
+        path: '/create-space',
+        builder: (context, state) => const NewSpacePage(),
+      ),
+      GoRoute(
+        path: '/create-space/status',
+        builder: (context, state) =>
+            SpaceStatusPage(result: state.extra as CreateSpaceResult),
+      ),
     ],
     redirect: (context, state) {
       final authState = authBloc.state;
