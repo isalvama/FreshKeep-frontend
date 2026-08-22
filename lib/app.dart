@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'core/config/env.dart';
+import 'core/di/service_locator.dart';
 import 'core/network/dio_client.dart';
 import 'features/auth/data/datasources/auth_local_datasource.dart';
 import 'features/auth/data/datasources/auth_remote_datasource.dart';
@@ -16,6 +17,8 @@ import 'features/auth/domain/usecases/register_usecase.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/login_bloc.dart';
 import 'features/auth/presentation/bloc/register_bloc.dart';
+import 'features/spaces/presentation/bloc/create_space_bloc.dart';
+import 'features/spaces/presentation/bloc/spaces_bloc.dart';
 import 'routes/app_router.dart';
 
 class App extends StatelessWidget {
@@ -28,6 +31,7 @@ class App extends StatelessWidget {
       baseUrl: Env.apiBaseUrl,
       secureStorage: secureStorage,
     );
+    setupServiceLocator(dio: dioClient.dio);
 
     final AuthRepository authRepository = AuthRepositoryImpl(
       remoteDataSource: AuthRemoteDataSource(dioClient.dio),
@@ -54,6 +58,8 @@ class App extends StatelessWidget {
             registerUseCase: RegisterUseCase(authRepository),
           ),
         ),
+        BlocProvider<SpacesBloc>.value(value: getIt<SpacesBloc>()),
+        BlocProvider<CreateSpaceBloc>.value(value: getIt<CreateSpaceBloc>()),
       ],
       child: MaterialApp.router(
         routerConfig: buildAppRouter(authBloc),
