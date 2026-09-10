@@ -61,9 +61,16 @@ class App extends StatelessWidget {
         BlocProvider<SpacesBloc>.value(value: getIt<SpacesBloc>()),
         BlocProvider<CreateSpaceBloc>.value(value: getIt<CreateSpaceBloc>()),
       ],
-      child: MaterialApp.router(
-        routerConfig: buildAppRouter(authBloc),
-        theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
+      child: BlocListener<AuthBloc, AuthState>(
+        listenWhen: (previous, current) =>
+            previous is! Authenticated && current is Authenticated,
+        listener: (context, state) {
+          context.read<SpacesBloc>().add(const SpacesRequested());
+        },
+        child: MaterialApp.router(
+          routerConfig: buildAppRouter(authBloc),
+          theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
+        ),
       ),
     );
   }

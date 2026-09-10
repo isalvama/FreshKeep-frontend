@@ -15,7 +15,7 @@ class _JsonResponseAdapter implements HttpClientAdapter {
   _JsonResponseAdapter({required this.statusCode, this.body});
 
   final int statusCode;
-  final Map<String, dynamic>? body;
+  final dynamic body;
 
   @override
   Future<ResponseBody> fetch(
@@ -67,6 +67,12 @@ Future<Either<SpaceFailure, Space>> _createSpace(SpaceRepositoryImpl repository)
       StorageSpotInput(name: 'Main Shelf', type: StorageSpotType.shelf),
     ],
   );
+}
+
+Future<Either<SpaceFailure, List<Space>>> _getUserSpaces(
+  SpaceRepositoryImpl repository,
+) {
+  return repository.getUserSpaces();
 }
 
 void main() {
@@ -128,6 +134,7 @@ void main() {
           body: {
             'id': 'space-1',
             'spaceName': 'Kitchen',
+            'emoji': '🏠',
             'storageSpots': [
               {
                 'storageSpotId': 'spot-1',
@@ -151,6 +158,88 @@ void main() {
       expect(space.storageSpots, hasLength(1));
       expect(space.storageSpots.first.name, 'Main Shelf');
       expect(space.storageSpots.first.type, StorageSpotType.shelf);
+    });
+  });
+
+  group('SpaceRepositoryImpl.getUserSpaces', () {
+    test('a successful call with items maps to a list of Space', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(
+          statusCode: 200,
+          body: [
+            {
+              'id': 'space-1',
+              'spaceName': 'Kitchen',
+              'emoji': '🏠',
+              'storageSpots': [
+                {
+                  'storageSpotId': 'spot-1',
+                  'storageSpotName': 'Main Shelf',
+                  'storageSpotType': 'SHELF',
+                },
+              ],
+              'creatorId': 'user-1',
+              'participantIds': ['user-1'],
+            },
+          ],
+        ),
+      );
+
+      final result = await _getUserSpaces(repository);
+
+      final spaces = result.getRight().toNullable();
+      expect(spaces, isNotNull);
+      expect(spaces, hasLength(1));
+      expect(spaces!.first.id, 'space-1');
+      expect(spaces.first.emoji, '🏠');
+    });
+
+    test('a successful call with no spaces maps to an empty list', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 200, body: <dynamic>[]),
+      );
+
+      final result = await _getUserSpaces(repository);
+
+      expect(result.getRight().toNullable(), isEmpty);
+    });
+
+    test('401 maps to SpaceUnauthorizedFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 401, body: {'detail': 'no token'}),
+      );
+
+      final result = await _getUserSpaces(repository);
+
+      expect(result.getLeft().toNullable(), isA<SpaceUnauthorizedFailure>());
+    });
+
+    test('403 maps to SpaceForbiddenFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 403, body: {'detail': 'wrong role'}),
+      );
+
+      final result = await _getUserSpaces(repository);
+
+      expect(result.getLeft().toNullable(), isA<SpaceForbiddenFailure>());
+    });
+
+    test('500 maps to SpaceServerFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 500, body: {'detail': 'boom'}),
+      );
+
+      final result = await _getUserSpaces(repository);
+
+      expect(result.getLeft().toNullable(), isA<SpaceServerFailure>());
+    });
+
+    test('connection error maps to SpaceNetworkFailure', () async {
+      final repository = _buildRepository(_ConnectionErrorAdapter());
+
+      final result = await _getUserSpaces(repository);
+
+      expect(result.getLeft().toNullable(), isA<SpaceNetworkFailure>());
     });
   });
 }

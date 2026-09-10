@@ -19,6 +19,11 @@ class _NeverCalledSpaceRepository implements SpaceRepository {
   }) {
     throw StateError('createSpace should not be called in this test');
   }
+
+  @override
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces() {
+    throw StateError('getUserSpaces should not be called in this test');
+  }
 }
 
 Future<void> _pumpNewSpacePage(WidgetTester tester) async {

@@ -278,6 +278,7 @@ same name with a different type, or same type with a different name, is allowed.
 {
   "id": "b3f1c9a0-....",
   "spaceName": "Kitchen",
+  "emoji": "🏠",
   "storageSpots": [
     { "storageSpotId": "c4a2d8b1-....", "storageSpotName": "Main Shelf", "storageSpotType": "SHELF" }
   ],
@@ -288,10 +289,6 @@ same name with a different type, or same type with a different name, is allowed.
 
 On creation, `participantIds` always contains exactly the creator's `userId` — there's no way to add other
 participants at creation time yet.
-
-⚠️ **The response does not echo back the submitted `emoji`.** `Space`'s `emoji` is persisted, but `SpaceResult`/
-`SpaceResponse` currently omit it entirely — the frontend must hold onto the value it submitted locally rather than
-expect it back from this endpoint.
 
 ### Error responses
 
@@ -311,15 +308,53 @@ on the field key (`errors["storageSpots[0].type"]`) being present.
 
 ---
 
+## 2. Get My Spaces
+
+`GET /api/v1/spaces`
+
+Returns every space where the authenticated user is a participant. Creators are automatically participants (see
+[Create Space](#1-create-space)), so this includes spaces the user created as well as ones they were added to.
+`creatorId`/participant scoping comes from the JWT's `userId` claim, same as `POST` — there's no request body or
+query parameters.
+
+### Success response — `200 OK`
+
+```json
+[
+  {
+    "id": "b3f1c9a0-....",
+    "spaceName": "Kitchen",
+    "emoji": "🏠",
+    "storageSpots": [
+      { "storageSpotId": "c4a2d8b1-....", "storageSpotName": "Main Shelf", "storageSpotType": "SHELF" }
+    ],
+    "creatorId": "d5b3e9c2-....",
+    "participantIds": ["d5b3e9c2-...."]
+  }
+]
+```
+
+Returns `200 OK` with an empty array (`[]`) — not an error — when the user is not a participant in any space.
+
+### Error responses
+
+| Status | Condition | Body (`ProblemDetail`) title |
+|--------|-----------|-------------------------------|
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+
+---
+
 ## Security & access control {#security--access-control-1}
 
-Enforced via `@PreAuthorize("hasRole('USER')")` on `SpaceController.create` — there is no URL-level rule for
-`/api/v1/spaces/**` in `AppSecurityConfiguration`, so it falls under the default `anyRequest().authenticated()` at
-the filter-chain level, with the role check happening at the method-security layer.
+Enforced via `@PreAuthorize("hasRole('USER')")` on both `SpaceController.create` and `SpaceController.getByParticipantId`
+— there is no URL-level rule for `/api/v1/spaces/**` in `AppSecurityConfiguration`, so it falls under the default
+`anyRequest().authenticated()` at the filter-chain level, with the role check happening at the method-security layer.
 
 | Endpoint | Filter chain | Method security | Net effect |
 |----------|--------------|------------------|------------|
 | `POST /api/v1/spaces` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
+| `GET /api/v1/spaces` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
 
 Failure handling matches the rest of the API (see [Failure handling for authorization](#failure-handling-for-authorization)):
 no/invalid token → 401 via `CustomAuthenticationEntryPoint`; valid token without the `USER` role → 403 via

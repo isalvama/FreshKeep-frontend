@@ -12,4 +12,11 @@ class SpaceRemoteDataSource {
     final response = await dio.post('/api/v1/spaces', data: request.toJson());
     return SpaceResponseModel.fromJson(response.data as Map<String, dynamic>);
   }
+
+  Future<List<SpaceResponseModel>> getSpaces() async {
+    final response = await dio.get('/api/v1/spaces');
+    return (response.data as List<dynamic>)
+        .map((json) => SpaceResponseModel.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
 }

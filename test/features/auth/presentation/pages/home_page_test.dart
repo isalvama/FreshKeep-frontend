@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fpdart/fpdart.dart';
+import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/auth/domain/repositories/auth_repository.dart';
 import 'package:fresh_keep_frontend/features/auth/domain/usecases/check_auth_status_usecase.dart';
 import 'package:fresh_keep_frontend/features/auth/domain/usecases/current_user_usecase.dart';
@@ -8,6 +12,9 @@ import 'package:fresh_keep_frontend/features/auth/domain/usecases/logout_usecase
 import 'package:fresh_keep_frontend/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:fresh_keep_frontend/features/auth/presentation/pages/home_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_input.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/repositories/space_repository.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/usecases/get_user_spaces_usecase.dart';
 import 'package:fresh_keep_frontend/features/spaces/presentation/bloc/spaces_bloc.dart';
 
 class _UnusedAuthRepository implements AuthRepository {
@@ -15,17 +22,58 @@ class _UnusedAuthRepository implements AuthRepository {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
-Future<void> _pumpHomePage(WidgetTester tester, {List<Space> spaces = const []}) async {
-  final repository = _UnusedAuthRepository();
-  final authBloc = AuthBloc(
-    checkAuthStatusUseCase: CheckAuthStatusUseCase(repository),
-    currentUserUseCase: CurrentUserUseCase(repository),
-    logoutUseCase: LogoutUseCase(repository),
-  );
-  final spacesBloc = SpacesBloc();
-  for (final space in spaces) {
-    spacesBloc.add(SpaceCreated(space));
+class _PendingSpaceRepository implements SpaceRepository {
+  final Completer<Either<SpaceFailure, List<Space>>> completer = Completer();
+
+  @override
+  Future<Either<SpaceFailure, Space>> createSpace({
+    required String spaceName,
+    required String emoji,
+    required List<StorageSpotInput> storageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces() => completer.future;
+}
+
+/// Returns [results] in order, one per call, holding on the last entry once exhausted.
+class _SequencedSpaceRepository implements SpaceRepository {
+  _SequencedSpaceRepository(this.results);
+
+  final List<Either<SpaceFailure, List<Space>>> results;
+  int _callCount = 0;
+
+  @override
+  Future<Either<SpaceFailure, Space>> createSpace({
+    required String spaceName,
+    required String emoji,
+    required List<StorageSpotInput> storageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces() async {
+    final result = results[_callCount];
+    if (_callCount < results.length - 1) _callCount++;
+    return result;
   }
+}
+
+const _space = Space(
+  id: 'space-1',
+  spaceName: 'Kitchen',
+  emoji: '🏠',
+  storageSpots: [],
+  creatorId: 'user-1',
+  participantIds: ['user-1'],
+);
+
+Future<void> _pumpHomePage(WidgetTester tester, SpacesBloc spacesBloc) async {
+  final authRepository = _UnusedAuthRepository();
+  final authBloc = AuthBloc(
+    checkAuthStatusUseCase: CheckAuthStatusUseCase(authRepository),
+    currentUserUseCase: CurrentUserUseCase(authRepository),
+    logoutUseCase: LogoutUseCase(authRepository),
+  );
   await tester.pumpWidget(
     MaterialApp(
       home: MultiBlocProvider(
@@ -37,23 +85,93 @@ Future<void> _pumpHomePage(WidgetTester tester, {List<Space> spaces = const []})
       ),
     ),
   );
-  await tester.pump();
 }
 
 void main() {
-  testWidgets('shows an empty state and a FAB when there are no spaces', (
+  testWidgets('shows a loading indicator while the fetch is in flight', (
     tester,
   ) async {
-    await _pumpHomePage(tester);
+    final spacesBloc = SpacesBloc(
+      getUserSpacesUseCase: GetUserSpacesUseCase(_PendingSpaceRepository()),
+    );
+    spacesBloc.add(const SpacesRequested());
 
-    expect(find.text('No spaces yet.'), findsOneWidget);
+    await _pumpHomePage(tester, spacesBloc);
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('shows the fetched spaces once loaded', (tester) async {
+    final spacesBloc = SpacesBloc(
+      getUserSpacesUseCase: GetUserSpacesUseCase(
+        _SequencedSpaceRepository([const Right([_space])]),
+      ),
+    );
+    spacesBloc.add(const SpacesRequested());
+
+    await _pumpHomePage(tester, spacesBloc);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kitchen'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsOneWidget);
   });
+
+  testWidgets('shows "No spaces yet." when loaded with an empty list', (
+    tester,
+  ) async {
+    final spacesBloc = SpacesBloc(
+      getUserSpacesUseCase: GetUserSpacesUseCase(
+        _SequencedSpaceRepository([const Right([])]),
+      ),
+    );
+    spacesBloc.add(const SpacesRequested());
+
+    await _pumpHomePage(tester, spacesBloc);
+    await tester.pumpAndSettle();
+
+    expect(find.text('No spaces yet.'), findsOneWidget);
+  });
+
+  testWidgets(
+    'shows an error and a Retry button on failure, which re-fetches successfully',
+    (tester) async {
+      final spacesBloc = SpacesBloc(
+        getUserSpacesUseCase: GetUserSpacesUseCase(
+          _SequencedSpaceRepository([
+            const Left(SpaceNetworkFailure('Network error.')),
+            const Right([_space]),
+          ]),
+        ),
+      );
+      spacesBloc.add(const SpacesRequested());
+
+      await _pumpHomePage(tester, spacesBloc);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Network error.'), findsOneWidget);
+      expect(find.widgetWithText(ElevatedButton, 'Retry'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Retry'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kitchen'), findsOneWidget);
+      expect(find.text('Network error.'), findsNothing);
+    },
+  );
 
   testWidgets('tapping the FAB opens the creation bottom sheet', (
     tester,
   ) async {
-    await _pumpHomePage(tester);
+    final spacesBloc = SpacesBloc(
+      getUserSpacesUseCase: GetUserSpacesUseCase(
+        _SequencedSpaceRepository([const Right([])]),
+      ),
+    );
+    spacesBloc.add(const SpacesRequested());
+
+    await _pumpHomePage(tester, spacesBloc);
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();

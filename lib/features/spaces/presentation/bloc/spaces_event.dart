@@ -9,3 +9,7 @@ final class SpaceCreated extends SpacesEvent {
 
   const SpaceCreated(this.space);
 }
+
+final class SpacesRequested extends SpacesEvent {
+  const SpacesRequested();
+}
