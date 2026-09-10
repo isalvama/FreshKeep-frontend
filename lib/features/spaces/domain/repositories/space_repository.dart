@@ -10,4 +10,6 @@ abstract class SpaceRepository {
     required String emoji,
     required List<StorageSpotInput> storageSpots,
   });
+
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces();
 }

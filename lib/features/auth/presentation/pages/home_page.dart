@@ -38,23 +38,51 @@ class HomePage extends StatelessWidget {
           Expanded(
             child: BlocBuilder<SpacesBloc, SpacesState>(
               builder: (context, state) {
-                if (state.spaces.isEmpty) {
-                  return const Center(child: Text('No spaces yet.'));
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: state.spaces.length,
-                  itemBuilder: (context, index) {
-                    final space = state.spaces[index];
-                    return ListTile(
-                      leading: Text(
-                        space.emoji,
-                        style: const TextStyle(fontSize: 24),
+                switch (state.status) {
+                  case SpacesStatus.initial:
+                  case SpacesStatus.loading:
+                    return const Center(child: CircularProgressIndicator());
+                  case SpacesStatus.loadFailure:
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              state.errorMessage ?? 'Something went wrong.',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: () => context
+                                  .read<SpacesBloc>()
+                                  .add(const SpacesRequested()),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
                       ),
-                      title: Text(space.spaceName),
                     );
-                  },
-                );
+                  case SpacesStatus.loaded:
+                    if (state.spaces.isEmpty) {
+                      return const Center(child: Text('No spaces yet.'));
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: state.spaces.length,
+                      itemBuilder: (context, index) {
+                        final space = state.spaces[index];
+                        return ListTile(
+                          leading: Text(
+                            space.emoji,
+                            style: const TextStyle(fontSize: 24),
+                          ),
+                          title: Text(space.spaceName),
+                        );
+                      },
+                    );
+                }
               },
             ),
           ),

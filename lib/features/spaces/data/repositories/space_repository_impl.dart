@@ -30,7 +30,17 @@ class SpaceRepositoryImpl implements SpaceRepository {
               .toList(),
         ),
       );
-      return Right(response.toEntity(emoji: emoji));
+      return Right(response.toEntity());
+    } on DioException catch (e) {
+      return Left(_mapDioException(e));
+    }
+  }
+
+  @override
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces() async {
+    try {
+      final responses = await remoteDataSource.getSpaces();
+      return Right(responses.map((response) => response.toEntity()).toList());
     } on DioException catch (e) {
       return Left(_mapDioException(e));
     }

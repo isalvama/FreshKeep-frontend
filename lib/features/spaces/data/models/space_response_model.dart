@@ -4,6 +4,7 @@ import 'storage_spot_response_model.dart';
 class SpaceResponseModel {
   final String id;
   final String spaceName;
+  final String emoji;
   final List<StorageSpotResponseModel> storageSpots;
   final String creatorId;
   final List<String> participantIds;
@@ -11,6 +12,7 @@ class SpaceResponseModel {
   const SpaceResponseModel({
     required this.id,
     required this.spaceName,
+    required this.emoji,
     required this.storageSpots,
     required this.creatorId,
     required this.participantIds,
@@ -20,6 +22,7 @@ class SpaceResponseModel {
     return SpaceResponseModel(
       id: json['id'] as String,
       spaceName: json['spaceName'] as String,
+      emoji: json['emoji'] as String,
       storageSpots: (json['storageSpots'] as List<dynamic>)
           .map(
             (spot) =>
@@ -33,9 +36,7 @@ class SpaceResponseModel {
     );
   }
 
-  // The response never carries the emoji back, so the caller must supply
-  // the value it originally submitted.
-  Space toEntity({required String emoji}) {
+  Space toEntity() {
     return Space(
       id: id,
       spaceName: spaceName,
