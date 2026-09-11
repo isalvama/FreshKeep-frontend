@@ -224,8 +224,9 @@ Any other route not matched above (i.e. anything outside `/api/v1/auth/**`) requ
 
 # Space API Contract
 
-Source: `SpaceController` (`modules/space/infrastructure/web`), `CreateSpaceService`, `Space`/`StorageSpot`/`Emoji` domain
-models, `JpaSpaceRepositoryAdapter`.
+Source: `SpaceController` (`modules/space/infrastructure/web`), `CreateSpaceService`, `GetSpaceOverviewService`,
+`GetStorageSpotsService`, `Space`/`StorageSpot`/`Emoji` domain models, `JpaSpaceRepositoryAdapter`,
+`SpaceProductsLookUpPort`/`ProductQueryAdapter` (product-listing lookup, `modules/product`).
 
 Base path: `api/v1/spaces`
 
@@ -345,17 +346,376 @@ Returns `200 OK` with an empty array (`[]`) — not an error — when the user i
 
 ---
 
+## 3. Get Space Overview
+
+`GET /api/v1/spaces/{spaceId}/overview`
+
+Returns a single space's current name/emoji/storage spots together with every product currently stored in it —
+the "what's in this space right now" view, meant to be used right after confirming/reprocessing a receipt, and
+whenever the user revisits the space afterward. Unlike the other endpoints in this section, storage spots and
+products are looked up live for this one call, not carried over from any earlier request — if a participant renamed
+a storage spot or another user added/removed products moments ago, this reflects that immediately.
+
+### Success response — `200 OK`
+
+```json
+{
+  "id": "b3f1c9a0-....",
+  "name": "Kitchen",
+  "emoji": "🏠",
+  "storageSpots": [
+    { "storageSpotId": "c4a2d8b1-....", "storageSpotName": "Fridge", "storageSpotType": "FRIDGE" }
+  ],
+  "productResults": [
+    {
+      "id": "e6c4fa03-....",
+      "productName": "Milk",
+      "expirationDate": "2026-09-15",
+      "storageSpotId": "c4a2d8b1-....",
+      "productType": "DAIRY",
+      "priceAmount": 2.50,
+      "currency": "USD"
+    }
+  ]
+}
+```
+
+`productResults` is returned sorted by `expirationDate` ascending (soonest-to-expire first) — same convention as
+the `confirm`/`reprocess` product lists. A space with no products yet returns `200 OK` with `productResults: []`,
+not an error.
+
+### Error responses
+
+| Status | Condition | Body (`ProblemDetail`) title |
+|--------|-----------|-------------------------------|
+| 400 Bad Request | `spaceId` path variable is not a valid UUID | "Validation Error in Parameter" |
+| 400 Bad Request | Space does not exist (`InvalidSpaceReferenceException`) | "Business Rule Error" |
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+| 409 Conflict | Authenticated user is not a participant of `spaceId` (`SpaceNotAccessibleException`) | "Conflict Error" |
+
+---
+
 ## Security & access control {#security--access-control-1}
 
-Enforced via `@PreAuthorize("hasRole('USER')")` on both `SpaceController.create` and `SpaceController.getByParticipantId`
-— there is no URL-level rule for `/api/v1/spaces/**` in `AppSecurityConfiguration`, so it falls under the default
-`anyRequest().authenticated()` at the filter-chain level, with the role check happening at the method-security layer.
+Enforced via `@PreAuthorize("hasRole('USER')")` on `SpaceController.create`, `SpaceController.getByParticipantId`, and
+`SpaceController.getOverView` — there is no URL-level rule for `/api/v1/spaces/**` in `AppSecurityConfiguration`, so it
+falls under the default `anyRequest().authenticated()` at the filter-chain level, with the role check happening at the
+method-security layer.
 
 | Endpoint | Filter chain | Method security | Net effect |
 |----------|--------------|------------------|------------|
 | `POST /api/v1/spaces` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
 | `GET /api/v1/spaces` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
+| `GET /api/v1/spaces/{spaceId}/overview` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
 
 Failure handling matches the rest of the API (see [Failure handling for authorization](#failure-handling-for-authorization)):
 no/invalid token → 401 via `CustomAuthenticationEntryPoint`; valid token without the `USER` role → 403 via
 `CustomAccessDeniedHandler`.
+
+---
+
+# Shopping Receipt API Contract
+
+Source: `ShoppingReceiptController` (`modules/shopping_receipt/infrastructure/web`), `ProcessNewShoppingReceiptService`,
+`ReProcessShoppingReceiptService`, `ConfirmShoppingReceiptService`, `ShoppingReceipt`/`ReceiptImage` domain models,
+`GlobalExceptionHandler`.
+
+Base path: `api/v1/spaces/{spaceId}`
+
+Requires authentication — every endpoint below needs a valid `Bearer` JWT for an account with the `USER` role
+(`@PreAuthorize("hasRole('USER')")`), same as the [Space API](#space-api-contract). `{spaceId}` in the path must be a
+valid UUID; the authenticated user must be a **participant** of that space (see
+[shared error responses](#shared-error-responses)).
+
+All three endpoints are steps of one flow: `processNewShoppingReceipt` runs the AI extraction on an uploaded image;
+the client then either `confirm`s the extracted data as-is, or `reprocess`es it after the user flags specific
+products as wrong. `reprocess` and `confirm` both consume/produce `application/json`; `processNewShoppingReceipt`
+consumes `multipart/form-data`.
+
+---
+
+## 1. Process a new Shopping Receipt
+
+`POST /api/v1/spaces/{spaceId}/receipt-images`
+
+Consumes `multipart/form-data`.
+
+### Request (`ProcessNewShoppingReceiptRequest`, bound via `@ModelAttribute`)
+
+| Field      | Type          | Constraints        |
+|------------|---------------|---------------------|
+| `file`     | file part     | required (`@NotNull`) — the receipt image |
+| `language` | string        | required (`@NotBlank`) — see [Language field](#language-field) below |
+
+This step only uploads and AI-extracts the receipt; it does **not** persist a `ShoppingReceipt` or any `Product`s
+yet. The uploaded image itself is persisted as a `ReceiptImage` (so its id can be referenced by `reprocess`/`confirm`
+without re-uploading), but the extracted data is returned to the client for review, not saved.
+
+### Success response — `201 Created`
+
+`Location` header: `/api/v1/spaces/{spaceId}/receipt-images/{receiptImageId}`
+
+```json
+{
+  "receiptImageId": "b3f1c9a0-....",
+  "suggestedStorageSpots": [
+    { "storageSpotId": "c4a2d8b1-....", "storageSpotName": "Fridge", "storageSpotType": "FRIDGE" }
+  ],
+  "purchaseShoppingDate": "2026-09-08",
+  "storeName": "SuperMart",
+  "productExtractions": [
+    {
+      "expirationDate": "2026-09-15",
+      "productName": "Milk",
+      "suggestedStorageSpotId": "c4a2d8b1-....",
+      "productType": "DAIRY",
+      "priceAmount": 2.50,
+      "currency": "USD"
+    }
+  ],
+  "flaggedProducts": [
+    {
+      "expirationDate": "2026-09-15",
+      "productName": "Milk",
+      "suggestedStorageSpotId": "c4a2d8b1-....",
+      "productType": "DAIRY",
+      "priceAmount": 2.50,
+      "currency": "USD"
+    }
+  ]
+}
+```
+
+Notes on this shape:
+
+- `productExtractions` is the full list of products the AI extracted; `flaggedProducts` is the **subset** of that
+  same list the AI itself flagged as low-confidence/worth reviewing (e.g. bad expiration-date guess) — it is not a
+  separate/user-driven list at this stage. Use it to pre-highlight rows for the user to double check before they
+  submit `reprocess` or `confirm`.
+- `purchaseShoppingDate` is already rectified server-side: if the AI extracted a future date, it's clamped to today
+  and every product's `expirationDate` is shifted by the same number of days. Trust this value over whatever the AI
+  originally read off the receipt.
+- Any product whose AI-suggested storage spot isn't one of this space's actual storage spots is silently
+  backfilled with a same-type fallback (or `null` if no matching type exists in the space) — don't expect
+  `suggestedStorageSpotId` to always be one of the ids the AI "saw" on the receipt.
+- If the AI review step itself is unreachable, `flaggedProducts` degrades to `[]` rather than failing the request —
+  the client won't get an error for this, just no flags.
+- `productExtractions[].productName`/`flaggedProducts[].productName` (and `errorReason`, if set) are written by the
+  AI in the language requested via `language` — see [Language field](#language-field) below.
+
+### Error responses
+
+| Status | Condition | Body title |
+|--------|-----------|------------|
+| 400 Bad Request | `file` missing, or malformed multipart body | "Validation Error In Body Data" / "Message Not Readable" |
+| 400 Bad Request | `file` is present but empty (`InvalidReceiptImageException`) | "Business Rule Error" |
+| 400 Bad Request | `spaceId` path variable is not a valid UUID | "Validation Error in Parameter" |
+| 400 Bad Request | Space does not exist (`InvalidSpaceReferenceException`) | "Business Rule Error" |
+| 400 Bad Request | AI extraction failed in a retryable way after retries exhausted (`AiRetryableException`) | "AI Server Error" |
+| 401/403 | Auth failures — see [shared error responses](#shared-error-responses) | — |
+| 409 Conflict | Authenticated user is not a participant of `spaceId` (`SpaceNotAccessibleException`) | "Conflict Error" |
+| 422 Unprocessable Content | AI could not process the image at all (`AiUnprocessableInputException`) — e.g. not a readable receipt | "Unprocessable Ticket Data Error" |
+| 429 Too Many Requests | AI provider rate limit hit (`AiRateLimitedException`) | "AI Rate Limit Exceedance" |
+| 500 Internal Server Error | Unexpected AI-side failure (`TicketProcessingException`) | "Internal AI Server Error" |
+
+---
+
+## 2. Reprocess with flagged products
+
+`POST /api/v1/spaces/{spaceId}/shopping-receipt/reprocess`
+
+Use this when the user reviewed the `processNewShoppingReceipt` response and flagged one or more products as wrong
+— it re-runs AI extraction (seeded with the full product list **and** the specific ones flagged) against the
+already-uploaded receipt image, then **persists** the resulting `ShoppingReceipt` and its `Product`s. This is the
+"AI, try again on these" path; use [Confirm](#3-confirm-and-persist) instead when nothing needs re-extraction.
+
+### Request body (`ReProcessShoppingReceiptRequest`)
+
+```json
+{
+  "receiptImageId": "b3f1c9a0-....",
+  "shoppingDate": "2026-09-08",
+  "storeName": "SuperMart",
+  "language": "es",
+  "flaggedProducts": [
+    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD" }
+  ],
+  "allProducts": [
+    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD" }
+  ]
+}
+```
+
+| Field             | Type                    | Constraints |
+|--------------------|-------------------------|-------------|
+| `receiptImageId`  | string (UUID)           | required, must reference a `ReceiptImage` already created via `processNewShoppingReceipt` |
+| `shoppingDate`    | string (`yyyy-MM-dd`)   | required, must not be in the future (`@PastOrPresent`, evaluated against the server's system clock) |
+| `storeName`       | string                  | required, non-blank |
+| `language`        | string                  | required (`@NotBlank`) — see [Language field](#language-field) below |
+| `flaggedProducts` | array of `ProductRequest` | required, non-empty — the products the user flagged for re-extraction |
+| `allProducts`     | array of `ProductRequest` | required, non-empty — the full current product list (flagged + unflagged), used as context for the AI |
+
+`ProductRequest`:
+
+| Field                    | Type                | Constraints |
+|--------------------------|---------------------|-------------|
+| `expirationDate`         | string (`yyyy-MM-dd`) | required |
+| `productName`            | string              | required, max 30 chars |
+| `suggestedStorageSpotId` | string (UUID)       | required |
+| `productType`            | string              | required, max 30 chars |
+| `priceAmount`            | number              | optional, must be positive if present |
+| `currency`               | string              | optional, max 20 chars |
+
+Both `flaggedProducts` and `allProducts` bind via indexed form/query-style keys under the hood
+(`@ModelAttribute`), e.g. `allProducts[0].productName=Milk` — send them as a normal JSON array in the request body;
+Spring handles the binding.
+
+### Success response — `201 Created`
+
+`Location` header: `/api/v1/spaces/{spaceId}/shopping-receipt/{shoppingReceiptId}`
+
+```json
+{
+  "id": "d5b3e9c2-....",
+  "shoppingDate": "2026-09-08",
+  "storeName": "SuperMart",
+  "products": [
+    {
+      "id": "e6c4fa03-....",
+      "productName": "Milk",
+      "expirationDate": "2026-09-15",
+      "storageSpotId": "c4a2d8b1-....",
+      "productType": "DAIRY",
+      "priceAmount": 2.50,
+      "currency": "USD"
+    }
+  ],
+  "storageSpots": [
+    { "storageSpotId": "c4a2d8b1-....", "storageSpotName": "Fridge", "storageSpotType": "FRIDGE" }
+  ]
+}
+```
+
+Unlike step 1, `products[].id` here is a real persisted `Product` id — this response reflects what was actually
+saved, not a re-extraction preview. `products[].productName` for any re-examined (flagged) product is written in
+the language requested via `language`; unflagged products keep whatever language they already had from the prior
+`processNewShoppingReceipt`/`reprocess` call, since they're carried over unchanged rather than re-extracted.
+
+`products` is returned sorted by `expirationDate` ascending (soonest-to-expire first), nulls last — the sort only
+affects response order, not persistence order.
+
+### Error responses
+
+| Status | Condition | Body title |
+|--------|-----------|------------|
+| 400 Bad Request | Any field fails bean validation (missing/blank/empty/future date/etc.) | "Validation Error In Body Data" |
+| 400 Bad Request | Malformed/missing JSON body | "Message Not Readable" |
+| 400 Bad Request | `spaceId`/`receiptImageId` not a valid UUID | "Validation Error in Parameter" / field error |
+| 400 Bad Request | Space does not exist (`InvalidSpaceReferenceException`) | "Business Rule Error" |
+| 400 Bad Request | `receiptImageId` does not reference an existing `ReceiptImage` (`NonExistentReceiptImageException`) | "Business Rule Error" |
+| 400 Bad Request | Rectified `shoppingDate` still ends up after today, e.g. from clock skew (`InvalidShoppingReceiptException`) | "Business Rule Error" |
+| 400 Bad Request | AI extraction failed in a retryable way after retries exhausted (`AiRetryableException`) | "AI Server Error" |
+| 401/403 | Auth failures — see [shared error responses](#shared-error-responses) | — |
+| 409 Conflict | Authenticated user is not a participant of `spaceId` (`SpaceNotAccessibleException`) | "Conflict Error" |
+| 422 Unprocessable Content | AI could not process the image at all (`AiUnprocessableInputException`) | "Unprocessable Ticket Data Error" |
+| 429 Too Many Requests | AI provider rate limit hit (`AiRateLimitedException`) | "AI Rate Limit Exceedance" |
+| 500 Internal Server Error | Unexpected AI-side failure (`TicketProcessingException`) | "Internal AI Server Error" |
+
+Note: unlike `processNewShoppingReceipt`, this endpoint has **no fallback** if the AI call fails outright — since its
+whole purpose is re-extraction, an AI failure here surfaces as a real error to the client rather than degrading
+silently.
+
+---
+
+## Language field {#language-field}
+
+`processNewShoppingReceipt` and `reprocess` both take a `language` field, used to instruct the AI to write
+`productName` (and `errorReason`, if set) in that language rather than whatever language the receipt itself is in.
+
+- Send the **language subtag only** — e.g. `"es"`, not `"es-AR"`. On Flutter, that's
+  `WidgetsBinding.instance.platformDispatcher.locale.languageCode`, not `.toLanguageTag()`.
+- Matching is case-insensitive.
+- Currently recognized values: `en` (English), `es` (Spanish), `ca` (Catalan), `fr` (French), `de` (German),
+  `pt` (Portuguese), `it` (Italian).
+- `language` is required at the request level (`@NotBlank` — a missing field is a `400`), but an unrecognized value
+  is **not** an error: the backend silently falls back to English rather than rejecting the request, since the
+  device can legitimately report a language the app doesn't support yet. Don't rely on validating this value against
+  the list above client-side beyond keeping the user's actual device language — send whatever `languageCode` you
+  get and let the backend degrade gracefully.
+- `confirm` has no `language` field — it never calls the AI, so there's nothing to translate.
+
+---
+
+## 3. Confirm and persist
+
+`POST /api/v1/spaces/{spaceId}/shopping-receipt/confirm`
+
+Use this when the user reviewed the `processNewShoppingReceipt` response and everything looked correct — it skips
+AI re-extraction entirely and persists the client-submitted data as-is (after backfilling any invalid storage-spot
+suggestions, same as the other two endpoints).
+
+### Request body (`ConfirmShoppingReceiptRequest`)
+
+Same shape as reprocess, **minus** `flaggedProducts`:
+
+```json
+{
+  "receiptImageId": "b3f1c9a0-....",
+  "shoppingDate": "2026-09-08",
+  "storeName": "SuperMart",
+  "allProducts": [
+    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD" }
+  ]
+}
+```
+
+| Field            | Type                       | Constraints |
+|-------------------|----------------------------|-------------|
+| `receiptImageId` | string (UUID)              | required, must reference a `ReceiptImage` already created via `processNewShoppingReceipt` |
+| `shoppingDate`   | string (`yyyy-MM-dd`)      | required, must not be in the future (`@PastOrPresent`) |
+| `storeName`      | string                     | required, non-blank |
+| `allProducts`    | array of `ProductRequest`  | required, non-empty — see `ProductRequest` shape under [Reprocess](#2-reprocess-with-flagged-products) |
+
+### Success response — `201 Created`
+
+Same `ShoppingReceiptResponse` shape as [Reprocess](#2-reprocess-with-flagged-products), `Location` header:
+`/api/v1/spaces/{spaceId}/shopping-receipt/{shoppingReceiptId}`.
+
+Unlike reprocess, `shoppingDate`/`storeName`/product fields here are **not** run through AI re-extraction or date
+rectification before persisting — they're saved exactly as submitted (storage-spot fallback resolution still
+applies). If `shoppingDate` is in the future, `ShoppingReceipt.create()`'s own domain validation rejects it (see
+error table below) rather than silently clamping it, unlike step 1's preview response.
+
+As with reprocess, `products` is returned sorted by `expirationDate` ascending (soonest-to-expire first), nulls
+last.
+
+### Error responses
+
+| Status | Condition | Body title |
+|--------|-----------|------------|
+| 400 Bad Request | Any field fails bean validation (missing/blank/empty/future date/etc.) | "Validation Error In Body Data" |
+| 400 Bad Request | Malformed/missing JSON body | "Message Not Readable" |
+| 400 Bad Request | `spaceId`/`receiptImageId` not a valid UUID | "Validation Error in Parameter" / field error |
+| 400 Bad Request | Space does not exist (`InvalidSpaceReferenceException`) | "Business Rule Error" |
+| 400 Bad Request | `receiptImageId` does not reference an existing `ReceiptImage` (`NonExistentReceiptImageException`) | "Business Rule Error" |
+| 400 Bad Request | `shoppingDate` is after the server's current date (`InvalidShoppingReceiptException`) | "Business Rule Error" |
+| 401/403 | Auth failures — see [shared error responses](#shared-error-responses) | — |
+| 409 Conflict | Authenticated user is not a participant of `spaceId` (`SpaceNotAccessibleException`) | "Conflict Error" |
+
+---
+
+## Shared error responses
+
+These apply to all three endpoints above, in addition to each endpoint's own table:
+
+| Status | Condition | Body title |
+|--------|-----------|------------|
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+
+Enforced the same way as the rest of the API — see [Security & access control](#security--access-control) and
+[Failure handling for authorization](#failure-handling-for-authorization).
+
+Error body shape (RFC 7807 `ProblemDetail`) is identical to the rest of the API — see
+[Error body shape](#error-body-shape).

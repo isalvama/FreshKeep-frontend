@@ -17,6 +17,7 @@ import 'features/auth/domain/usecases/register_usecase.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/login_bloc.dart';
 import 'features/auth/presentation/bloc/register_bloc.dart';
+import 'features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'features/spaces/presentation/bloc/create_space_bloc.dart';
 import 'features/spaces/presentation/bloc/spaces_bloc.dart';
 import 'routes/app_router.dart';
@@ -60,6 +61,9 @@ class App extends StatelessWidget {
         ),
         BlocProvider<SpacesBloc>.value(value: getIt<SpacesBloc>()),
         BlocProvider<CreateSpaceBloc>.value(value: getIt<CreateSpaceBloc>()),
+        BlocProvider<ShoppingReceiptBloc>.value(
+          value: getIt<ShoppingReceiptBloc>(),
+        ),
       ],
       child: BlocListener<AuthBloc, AuthState>(
         listenWhen: (previous, current) =>
