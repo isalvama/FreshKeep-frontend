@@ -32,6 +32,19 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
     required List<ProductExtraction> allProducts,
     required List<StorageSpot> spaceStorageSpots,
   }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
 }
 
 final _extraction = ReceiptExtractionResult(

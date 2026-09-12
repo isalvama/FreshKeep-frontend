@@ -21,4 +21,15 @@ abstract class ShoppingReceiptRepository {
     required List<ProductExtraction> allProducts,
     required List<StorageSpot> spaceStorageSpots,
   });
+
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  });
 }

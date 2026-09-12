@@ -37,6 +37,19 @@ class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository
     required List<ProductExtraction> allProducts,
     required List<StorageSpot> spaceStorageSpots,
   }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
 }
 
 class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
@@ -58,6 +71,19 @@ class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
     required List<ProductExtraction> allProducts,
     required List<StorageSpot> spaceStorageSpots,
   }) => throw UnimplementedError();

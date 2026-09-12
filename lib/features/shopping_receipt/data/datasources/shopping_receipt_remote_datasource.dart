@@ -54,6 +54,37 @@ class ShoppingReceiptRemoteDataSource {
       response.data as Map<String, dynamic>,
     );
   }
+
+  Future<PersistedShoppingReceiptResponseModel> reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) async {
+    final response = await dio.post(
+      '/api/v1/spaces/$spaceId/shopping-receipt/reprocess',
+      data: {
+        'receiptImageId': receiptImageId,
+        'shoppingDate': formatDateForRequest(shoppingDate),
+        'storeName': storeName,
+        'language': language,
+        'flaggedProducts': flaggedProducts
+            .map((product) => productRequestJson(product, spaceStorageSpots))
+            .toList(),
+        'allProducts': allProducts
+            .map((product) => productRequestJson(product, spaceStorageSpots))
+            .toList(),
+      },
+    );
+
+    return PersistedShoppingReceiptResponseModel.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
 }
 
 /// Formats a [DateTime] as `yyyy-MM-dd`, the wire format every shopping-receipt

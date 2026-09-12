@@ -56,6 +56,34 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
     }
   }
 
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) async {
+    try {
+      final response = await remoteDataSource.reprocessReceipt(
+        spaceId: spaceId,
+        receiptImageId: receiptImageId,
+        shoppingDate: shoppingDate,
+        storeName: storeName,
+        language: language,
+        flaggedProducts: flaggedProducts,
+        allProducts: allProducts,
+        spaceStorageSpots: spaceStorageSpots,
+      );
+      return Right(response.toEntity());
+    } on DioException catch (e) {
+      return Left(_mapDioException(e));
+    }
+  }
+
   ShoppingReceiptFailure _mapDioException(DioException e) {
     final status = e.response?.statusCode;
     final data = e.response?.data;
