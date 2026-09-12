@@ -53,3 +53,41 @@ class SpaceServerFailure extends SpaceFailure {
 class SpaceNetworkFailure extends SpaceFailure {
   const SpaceNetworkFailure(super.message); // no connectivity / timeout
 }
+
+sealed class ShoppingReceiptFailure {
+  final String message;
+
+  const ShoppingReceiptFailure(this.message);
+}
+
+class ShoppingReceiptValidationFailure extends ShoppingReceiptFailure {
+  const ShoppingReceiptValidationFailure(super.message); // 400
+}
+
+class ShoppingReceiptUnauthorizedFailure extends ShoppingReceiptFailure {
+  const ShoppingReceiptUnauthorizedFailure(super.message); // 401
+}
+
+class ShoppingReceiptForbiddenFailure extends ShoppingReceiptFailure {
+  const ShoppingReceiptForbiddenFailure(super.message); // 403
+}
+
+class ShoppingReceiptConflictFailure extends ShoppingReceiptFailure {
+  const ShoppingReceiptConflictFailure(super.message); // 409 — not a participant
+}
+
+class ShoppingReceiptUnprocessableFailure extends ShoppingReceiptFailure {
+  const ShoppingReceiptUnprocessableFailure(super.message); // 422 — unreadable image
+}
+
+class ShoppingReceiptRateLimitedFailure extends ShoppingReceiptFailure {
+  const ShoppingReceiptRateLimitedFailure(super.message); // 429
+}
+
+class ShoppingReceiptServerFailure extends ShoppingReceiptFailure {
+  const ShoppingReceiptServerFailure(super.message); // 500
+}
+
+class ShoppingReceiptNetworkFailure extends ShoppingReceiptFailure {
+  const ShoppingReceiptNetworkFailure(super.message); // no connectivity / timeout
+}
