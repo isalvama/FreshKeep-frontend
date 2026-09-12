@@ -29,3 +29,11 @@ final class ReprocessSelectionToggled extends ShoppingReceiptEvent {
 
   const ReprocessSelectionToggled(this.productIndex);
 }
+
+final class ReceiptConfirmSubmitted extends ShoppingReceiptEvent {
+  const ReceiptConfirmSubmitted();
+}
+
+final class ReceiptReprocessSubmitted extends ShoppingReceiptEvent {
+  const ReceiptReprocessSubmitted();
+}

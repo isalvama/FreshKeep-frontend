@@ -9,7 +9,9 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/pe
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/product_extraction.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/receipt_extraction_result.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/repositories/shopping_receipt_repository.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/confirm_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/reprocess_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_processing_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
@@ -111,6 +113,10 @@ final _extraction = ReceiptExtractionResult(
 ShoppingReceiptBloc _buildReadyBloc(ShoppingReceiptRepository repository) {
   final bloc = ShoppingReceiptBloc(
     processNewShoppingReceiptUseCase: ProcessNewShoppingReceiptUseCase(
+      repository,
+    ),
+    confirmShoppingReceiptUseCase: ConfirmShoppingReceiptUseCase(repository),
+    reprocessShoppingReceiptUseCase: ReprocessShoppingReceiptUseCase(
       repository,
     ),
   );

@@ -18,7 +18,7 @@ class ReceiptResultsPage extends StatelessWidget {
           return const Scaffold(body: SizedBox.shrink());
         }
 
-        final result = status.result;
+        final result = state.extraction!;
         final storageSpotsById = {
           for (final spot in result.suggestedStorageSpots) spot.id: spot,
         };

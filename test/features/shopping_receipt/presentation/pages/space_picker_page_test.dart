@@ -9,7 +9,9 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/pe
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/product_extraction.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/receipt_extraction_result.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/repositories/shopping_receipt_repository.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/confirm_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/reprocess_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/space_picker_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
@@ -100,9 +102,14 @@ Future<SpacesBloc> _seededSpacesBloc(List<Space> spaces) async {
 }
 
 ShoppingReceiptBloc _buildShoppingReceiptBloc() {
+  final repository = _NeverCalledShoppingReceiptRepository();
   return ShoppingReceiptBloc(
     processNewShoppingReceiptUseCase: ProcessNewShoppingReceiptUseCase(
-      _NeverCalledShoppingReceiptRepository(),
+      repository,
+    ),
+    confirmShoppingReceiptUseCase: ConfirmShoppingReceiptUseCase(repository),
+    reprocessShoppingReceiptUseCase: ReprocessShoppingReceiptUseCase(
+      repository,
     ),
   );
 }

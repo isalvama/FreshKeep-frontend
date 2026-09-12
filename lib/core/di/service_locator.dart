@@ -4,7 +4,9 @@ import 'package:get_it/get_it.dart';
 import '../../features/shopping_receipt/data/datasources/shopping_receipt_remote_datasource.dart';
 import '../../features/shopping_receipt/data/repositories/shopping_receipt_repository_impl.dart';
 import '../../features/shopping_receipt/domain/repositories/shopping_receipt_repository.dart';
+import '../../features/shopping_receipt/domain/usecases/confirm_shopping_receipt_usecase.dart';
 import '../../features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
+import '../../features/shopping_receipt/domain/usecases/reprocess_shopping_receipt_usecase.dart';
 import '../../features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import '../../features/spaces/data/datasources/space_remote_datasource.dart';
 import '../../features/spaces/data/repositories/space_repository_impl.dart';
@@ -39,7 +41,13 @@ void setupServiceLocator({required Dio dio}) {
     () => ShoppingReceiptRepositoryImpl(remoteDataSource: getIt()),
   );
   getIt.registerFactory(() => ProcessNewShoppingReceiptUseCase(getIt()));
+  getIt.registerFactory(() => ConfirmShoppingReceiptUseCase(getIt()));
+  getIt.registerFactory(() => ReprocessShoppingReceiptUseCase(getIt()));
   getIt.registerLazySingleton(
-    () => ShoppingReceiptBloc(processNewShoppingReceiptUseCase: getIt()),
+    () => ShoppingReceiptBloc(
+      processNewShoppingReceiptUseCase: getIt(),
+      confirmShoppingReceiptUseCase: getIt(),
+      reprocessShoppingReceiptUseCase: getIt(),
+    ),
   );
 }

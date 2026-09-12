@@ -10,7 +10,9 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/pe
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/product_extraction.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/receipt_extraction_result.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/repositories/shopping_receipt_repository.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/confirm_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/reprocess_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/confirm_image_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
@@ -93,9 +95,17 @@ ShoppingReceiptBloc _buildBlocWithImage(
   String imagePath, {
   ShoppingReceiptRepository? repository,
 }) {
+  final resolvedRepository =
+      repository ?? _NeverCalledShoppingReceiptRepository();
   final bloc = ShoppingReceiptBloc(
     processNewShoppingReceiptUseCase: ProcessNewShoppingReceiptUseCase(
-      repository ?? _NeverCalledShoppingReceiptRepository(),
+      resolvedRepository,
+    ),
+    confirmShoppingReceiptUseCase: ConfirmShoppingReceiptUseCase(
+      resolvedRepository,
+    ),
+    reprocessShoppingReceiptUseCase: ReprocessShoppingReceiptUseCase(
+      resolvedRepository,
     ),
   );
   bloc.add(const SpaceForReceiptSelected('space-1'));
