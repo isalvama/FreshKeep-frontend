@@ -8,6 +8,11 @@ import '../../features/shopping_receipt/domain/usecases/confirm_shopping_receipt
 import '../../features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
 import '../../features/shopping_receipt/domain/usecases/reprocess_shopping_receipt_usecase.dart';
 import '../../features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
+import '../../features/space_overview/data/datasources/space_overview_remote_datasource.dart';
+import '../../features/space_overview/data/repositories/space_overview_repository_impl.dart';
+import '../../features/space_overview/domain/repositories/space_overview_repository.dart';
+import '../../features/space_overview/domain/usecases/get_space_overview_usecase.dart';
+import '../../features/space_overview/presentation/bloc/space_overview_bloc.dart';
 import '../../features/spaces/data/datasources/space_remote_datasource.dart';
 import '../../features/spaces/data/repositories/space_repository_impl.dart';
 import '../../features/spaces/domain/repositories/space_repository.dart';
@@ -49,5 +54,16 @@ void setupServiceLocator({required Dio dio}) {
       confirmShoppingReceiptUseCase: getIt(),
       reprocessShoppingReceiptUseCase: getIt(),
     ),
+  );
+
+  getIt.registerLazySingleton<SpaceOverviewRemoteDataSource>(
+    () => SpaceOverviewRemoteDataSource(dio),
+  );
+  getIt.registerLazySingleton<SpaceOverviewRepository>(
+    () => SpaceOverviewRepositoryImpl(remoteDataSource: getIt()),
+  );
+  getIt.registerFactory(() => GetSpaceOverviewUseCase(getIt()));
+  getIt.registerFactory(
+    () => SpaceOverviewBloc(getSpaceOverviewUseCase: getIt()),
   );
 }

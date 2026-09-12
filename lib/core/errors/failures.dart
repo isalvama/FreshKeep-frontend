@@ -91,3 +91,29 @@ class ShoppingReceiptServerFailure extends ShoppingReceiptFailure {
 class ShoppingReceiptNetworkFailure extends ShoppingReceiptFailure {
   const ShoppingReceiptNetworkFailure(super.message); // no connectivity / timeout
 }
+
+sealed class SpaceOverviewFailure {
+  final String message;
+
+  const SpaceOverviewFailure(this.message);
+}
+
+class SpaceOverviewValidationFailure extends SpaceOverviewFailure {
+  const SpaceOverviewValidationFailure(super.message); // 400
+}
+
+class SpaceOverviewUnauthorizedFailure extends SpaceOverviewFailure {
+  const SpaceOverviewUnauthorizedFailure(super.message); // 401
+}
+
+class SpaceOverviewForbiddenFailure extends SpaceOverviewFailure {
+  const SpaceOverviewForbiddenFailure(super.message); // 403
+}
+
+class SpaceOverviewConflictFailure extends SpaceOverviewFailure {
+  const SpaceOverviewConflictFailure(super.message); // 409 — not a participant
+}
+
+class SpaceOverviewNetworkFailure extends SpaceOverviewFailure {
+  const SpaceOverviewNetworkFailure(super.message); // no connectivity / timeout
+}

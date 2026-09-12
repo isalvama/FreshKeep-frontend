@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/di/service_locator.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
 import '../features/auth/presentation/pages/home_page.dart';
 import '../features/auth/presentation/pages/login_page.dart';
@@ -11,8 +13,11 @@ import '../features/auth/presentation/pages/splash_page.dart';
 import '../features/shopping_receipt/presentation/pages/confirm_image_page.dart';
 import '../features/shopping_receipt/presentation/pages/receipt_error_page.dart';
 import '../features/shopping_receipt/presentation/pages/receipt_processing_page.dart';
+import '../features/shopping_receipt/presentation/pages/receipt_reprocessed_page.dart';
 import '../features/shopping_receipt/presentation/pages/receipt_results_page.dart';
 import '../features/shopping_receipt/presentation/pages/space_picker_page.dart';
+import '../features/space_overview/presentation/bloc/space_overview_bloc.dart';
+import '../features/space_overview/presentation/pages/space_overview_page.dart';
 import '../features/spaces/presentation/pages/create_space_result.dart';
 import '../features/spaces/presentation/pages/new_space_page.dart';
 import '../features/spaces/presentation/pages/space_status_page.dart';
@@ -72,6 +77,22 @@ GoRouter buildAppRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/process-receipt/results',
         builder: (context, state) => const ReceiptResultsPage(),
+      ),
+      GoRoute(
+        path: '/process-receipt/reprocessed-results',
+        builder: (context, state) => const ReceiptReprocessedPage(),
+      ),
+      GoRoute(
+        path: '/space-overview/:spaceId',
+        builder: (context, state) {
+          final spaceId = state.pathParameters['spaceId']!;
+          return BlocProvider(
+            create: (_) =>
+                getIt<SpaceOverviewBloc>()
+                  ..add(SpaceOverviewRequested(spaceId)),
+            child: SpaceOverviewPage(spaceId: spaceId),
+          );
+        },
       ),
     ],
     redirect: (context, state) {

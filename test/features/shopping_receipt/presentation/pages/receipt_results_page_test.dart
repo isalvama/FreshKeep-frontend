@@ -383,6 +383,11 @@ void main() {
       expect(find.text('Something went wrong.'), findsOneWidget);
       expect(find.byType(ReceiptResultsPage), findsOneWidget);
       expect(bloc.state.consecutiveFailureCount, 1);
+
+      final okButton = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'OK'),
+      );
+      expect(okButton.onPressed, isNotNull);
     },
   );
 
