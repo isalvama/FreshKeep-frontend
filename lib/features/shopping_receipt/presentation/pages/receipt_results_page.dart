@@ -13,12 +13,15 @@ class ReceiptResultsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<ShoppingReceiptBloc, ShoppingReceiptState>(
       builder: (context, state) {
-        final status = state.status;
-        if (status is! ShoppingReceiptProcessSuccess) {
+        final result = state.extraction;
+        if (result == null) {
           return const Scaffold(body: SizedBox.shrink());
         }
 
-        final result = state.extraction!;
+        final status = state.status;
+        final isSubmitting =
+            status is ShoppingReceiptConfirming ||
+            status is ShoppingReceiptReprocessing;
         final storageSpotsById = {
           for (final spot in result.suggestedStorageSpots) spot.id: spot,
         };
@@ -94,10 +97,18 @@ class ReceiptResultsPage extends StatelessWidget {
                       .add(ReprocessSelectionToggled(index)),
                 ),
               const SizedBox(height: 32),
+              if (isSubmitting) ...[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 16),
+              ],
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: null,
+                  onPressed: isSubmitting
+                      ? null
+                      : () => context.read<ShoppingReceiptBloc>().add(
+                          const ReceiptConfirmSubmitted(),
+                        ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -111,7 +122,11 @@ class ReceiptResultsPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: null,
+                  onPressed: isSubmitting || state.selectedForReprocess.isEmpty
+                      ? null
+                      : () => context.read<ShoppingReceiptBloc>().add(
+                          const ReceiptReprocessSubmitted(),
+                        ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
