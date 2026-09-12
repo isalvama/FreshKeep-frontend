@@ -1,6 +1,6 @@
 # SPEC 05 — Capture and process a new shopping receipt
 
-> **Status:** Implmeneted
+> **Status:** Implemented
 > **Depends on:** SPEC 03 (create-space-storage-spots) — reuses the `Space`/`StorageSpot` domain entities for display; SPEC 04 (fetch-and-display-spaces-on-login) — the space picker reads `SpacesBloc.state.spaces`, already loaded on login; backend Shopping Receipt API (`POST /api/v1/spaces/{spaceId}/receipt-images`, documented in `api_contract.md`)
 > **Date:** 2026-09-11
 > **Objective:** Let an authenticated user pick one of their spaces and a single receipt photo from their device's photo library, upload it for AI extraction via `POST /api/v1/spaces/{spaceId}/receipt-images`, and review the extracted shopping-receipt data — including per-product selection for a later reprocess step — on a results screen whose "confirm"/"reprocess" actions are wired up in a following spec.
