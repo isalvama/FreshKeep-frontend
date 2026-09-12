@@ -75,14 +75,16 @@ Future<void> _pumpHomePage(WidgetTester tester, SpacesBloc spacesBloc) async {
     logoutUseCase: LogoutUseCase(authRepository),
   );
   await tester.pumpWidget(
-    MaterialApp(
-      home: MultiBlocProvider(
-        providers: [
-          BlocProvider<AuthBloc>.value(value: authBloc),
-          BlocProvider<SpacesBloc>.value(value: spacesBloc),
-        ],
-        child: const HomePage(),
-      ),
+    // Providers sit above MaterialApp, mirroring app.dart's actual structure —
+    // showModalBottomSheet pushes its content as a sibling overlay route on the
+    // Navigator, not a descendant of whatever's inside `home:`, so any provider
+    // a modal sheet needs must be an ancestor of the Navigator itself.
+    MultiBlocProvider(
+      providers: [
+        BlocProvider<AuthBloc>.value(value: authBloc),
+        BlocProvider<SpacesBloc>.value(value: spacesBloc),
+      ],
+      child: const MaterialApp(home: HomePage()),
     ),
   );
 }
@@ -160,26 +162,25 @@ void main() {
     },
   );
 
-  testWidgets('tapping the FAB opens the creation bottom sheet', (
-    tester,
-  ) async {
-    final spacesBloc = SpacesBloc(
-      getUserSpacesUseCase: GetUserSpacesUseCase(
-        _SequencedSpaceRepository([const Right([])]),
-      ),
-    );
-    spacesBloc.add(const SpacesRequested());
+  testWidgets(
+    'tapping the FAB opens the creation bottom sheet; "Process a New Receipt" '
+    'is hidden when the user has no spaces',
+    (tester) async {
+      final spacesBloc = SpacesBloc(
+        getUserSpacesUseCase: GetUserSpacesUseCase(
+          _SequencedSpaceRepository([const Right([])]),
+        ),
+      );
+      spacesBloc.add(const SpacesRequested());
 
-    await _pumpHomePage(tester, spacesBloc);
-    await tester.pumpAndSettle();
+      await _pumpHomePage(tester, spacesBloc);
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(FloatingActionButton));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Create a New Space'), findsOneWidget);
-    final receiptButton = tester.widget<ElevatedButton>(
-      find.widgetWithText(ElevatedButton, 'Add a New Receipt'),
-    );
-    expect(receiptButton.onPressed, isNull);
-  });
+      expect(find.text('Create a New Space'), findsOneWidget);
+      expect(find.text('Process a New Receipt'), findsNothing);
+    },
+  );
 }
