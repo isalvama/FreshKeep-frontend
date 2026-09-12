@@ -122,6 +122,27 @@ void main() {
     expect(find.text('RESULTS_MARKER'), findsOneWidget);
   });
 
+  testWidgets(
+    'a state change that stays within ProcessSuccess (e.g. a reprocess '
+    'selection toggle on the still-mounted bloc) does not re-navigate',
+    (tester) async {
+      final bloc = _buildReadyBloc(
+        _StubShoppingReceiptRepository(Right(_extraction)),
+      );
+
+      await _pumpProcessingPage(tester, bloc);
+      bloc.add(const ReceiptProcessingSubmitted());
+      await tester.pumpAndSettle();
+
+      expect(find.text('RESULTS_MARKER'), findsOneWidget);
+
+      bloc.add(const ReprocessSelectionToggled(0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('RESULTS_MARKER'), findsOneWidget);
+    },
+  );
+
   testWidgets('navigates to the error screen on failure', (tester) async {
     final bloc = _buildReadyBloc(
       _StubShoppingReceiptRepository(

@@ -9,6 +9,8 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/domain/repositorie
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_results_page.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
 
 class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   _StubShoppingReceiptRepository(this.result);
@@ -51,9 +53,21 @@ final _eggs = ProductExtraction(
   currency: 'USD',
 );
 
+const _fridge = StorageSpot(
+  id: 'spot-1',
+  name: 'Fridge',
+  type: StorageSpotType.fridge,
+);
+
+const _pantry = StorageSpot(
+  id: 'spot-2',
+  name: 'Pantry',
+  type: StorageSpotType.pantry,
+);
+
 final _extraction = ReceiptExtractionResult(
   receiptImageId: 'receipt-1',
-  suggestedStorageSpots: const [],
+  suggestedStorageSpots: const [_fridge, _pantry],
   purchaseShoppingDate: DateTime(2026, 9, 8),
   storeName: 'SuperMart',
   productExtractions: [_milk, _bread, _eggs],
@@ -102,6 +116,17 @@ void main() {
 
     expect(find.text('SuperMart'), findsOneWidget);
     expect(find.text('2026-09-08'), findsOneWidget);
+  });
+
+  testWidgets('shows the suggested storage spot for each product', (
+    tester,
+  ) async {
+    final bloc = await _buildSucceededBloc();
+
+    await _pumpResultsPage(tester, bloc);
+
+    expect(find.textContaining('Fridge'), findsNWidgets(2)); // Milk, Eggs
+    expect(find.textContaining('Pantry'), findsOneWidget); // Bread
   });
 
   testWidgets(

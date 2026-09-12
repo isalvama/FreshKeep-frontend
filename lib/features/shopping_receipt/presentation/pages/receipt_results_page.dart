@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../spaces/domain/entities/storage_spot.dart';
 import '../../domain/entities/product_extraction.dart';
 import '../bloc/shopping_receipt_bloc.dart';
 
@@ -18,6 +19,9 @@ class ReceiptResultsPage extends StatelessWidget {
         }
 
         final result = status.result;
+        final storageSpotsById = {
+          for (final spot in result.suggestedStorageSpots) spot.id: spot,
+        };
         final flagged = result.flaggedProducts.toSet();
         final flaggedIndices = <int>[];
         final restIndices = <int>[];
@@ -61,6 +65,9 @@ class ReceiptResultsPage extends StatelessWidget {
                         for (final index in flaggedIndices)
                           _ProductTile(
                             product: result.productExtractions[index],
+                            storageSpot: storageSpotsById[result
+                                .productExtractions[index]
+                                .suggestedStorageSpotId],
                             selected: state.selectedForReprocess.contains(
                               index,
                             ),
@@ -77,6 +84,10 @@ class ReceiptResultsPage extends StatelessWidget {
               for (final index in restIndices)
                 _ProductTile(
                   product: result.productExtractions[index],
+                  storageSpot:
+                      storageSpotsById[result
+                          .productExtractions[index]
+                          .suggestedStorageSpotId],
                   selected: state.selectedForReprocess.contains(index),
                   onChanged: (_) => context
                       .read<ShoppingReceiptBloc>()
@@ -127,22 +138,26 @@ String _formatDate(DateTime date) {
 class _ProductTile extends StatelessWidget {
   const _ProductTile({
     required this.product,
+    required this.storageSpot,
     required this.selected,
     required this.onChanged,
   });
 
   final ProductExtraction product;
+  final StorageSpot? storageSpot;
   final bool selected;
   final ValueChanged<bool?> onChanged;
 
   @override
   Widget build(BuildContext context) {
+    final spotLabel = storageSpot?.name ?? 'No suggested spot';
     return CheckboxListTile(
       value: selected,
       onChanged: onChanged,
       title: Text(product.productName),
       subtitle: Text(
-        '${product.productType} · exp. ${_formatDate(product.expirationDate)}',
+        '${product.productType} · $spotLabel · '
+        'exp. ${_formatDate(product.expirationDate)}',
       ),
     );
   }

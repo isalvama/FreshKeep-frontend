@@ -55,9 +55,8 @@ class App extends StatelessWidget {
           ),
         ),
         BlocProvider<RegisterBloc>(
-          create: (_) => RegisterBloc(
-            registerUseCase: RegisterUseCase(authRepository),
-          ),
+          create: (_) =>
+              RegisterBloc(registerUseCase: RegisterUseCase(authRepository)),
         ),
         BlocProvider<SpacesBloc>.value(value: getIt<SpacesBloc>()),
         BlocProvider<CreateSpaceBloc>.value(value: getIt<CreateSpaceBloc>()),

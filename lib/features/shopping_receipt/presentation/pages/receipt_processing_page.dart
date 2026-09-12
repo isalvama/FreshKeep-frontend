@@ -12,8 +12,10 @@ class ReceiptProcessingPage extends StatelessWidget {
     return Scaffold(
       body: BlocListener<ShoppingReceiptBloc, ShoppingReceiptState>(
         listenWhen: (previous, current) =>
-            current.status is ShoppingReceiptProcessSuccess ||
-            current.status is ShoppingReceiptProcessFailure,
+            (previous.status is! ShoppingReceiptProcessSuccess &&
+                current.status is ShoppingReceiptProcessSuccess) ||
+            (previous.status is! ShoppingReceiptProcessFailure &&
+                current.status is ShoppingReceiptProcessFailure),
         listener: (context, state) {
           if (state.status is ShoppingReceiptProcessSuccess) {
             context.push('/process-receipt/results');
