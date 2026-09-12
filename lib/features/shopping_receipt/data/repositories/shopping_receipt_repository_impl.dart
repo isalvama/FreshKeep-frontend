@@ -15,7 +15,8 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
   const ShoppingReceiptRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>> processNewReceipt({
+  Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>>
+  processNewReceipt({
     required String spaceId,
     required String imagePath,
     required String language,
@@ -28,12 +29,18 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
       );
       return Right(response.toEntity());
     } on DioException catch (e) {
-      return Left(_mapDioException(e));
+      return Left(
+        _mapDioException(
+          e,
+          validationFallback: 'Please check the selected image.',
+        ),
+      );
     }
   }
 
   @override
-  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> confirmReceipt({
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  confirmReceipt({
     required String spaceId,
     required String receiptImageId,
     required DateTime shoppingDate,
@@ -57,7 +64,8 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
   }
 
   @override
-  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> reprocessReceipt({
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  reprocessReceipt({
     required String spaceId,
     required String receiptImageId,
     required DateTime shoppingDate,
@@ -84,15 +92,24 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
     }
   }
 
-  ShoppingReceiptFailure _mapDioException(DioException e) {
+  ShoppingReceiptFailure _mapDioException(
+    DioException e, {
+    String validationFallback = 'Please check the receipt details.',
+  }) {
     final status = e.response?.statusCode;
     final data = e.response?.data;
     final detail = data is Map ? data['detail'] as String? : null;
+    final fieldErrors = data is Map ? data['errors'] as Map? : null;
+    final fieldErrorsSummary = (fieldErrors != null && fieldErrors.isNotEmpty)
+        ? fieldErrors.entries
+              .map((entry) => '${entry.key}: ${entry.value}')
+              .join('; ')
+        : null;
 
     switch (status) {
       case 400:
         return ShoppingReceiptValidationFailure(
-          detail ?? 'Please check the selected image.',
+          detail ?? fieldErrorsSummary ?? validationFallback,
         );
       case 401:
         return ShoppingReceiptUnauthorizedFailure(

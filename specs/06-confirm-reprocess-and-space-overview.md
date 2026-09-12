@@ -1,6 +1,6 @@
 # SPEC 06 — Confirm or reprocess a shopping receipt and land on the space overview
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 05 (pick-and-process-new-shopping-receipt) — extends `ShoppingReceiptBloc` and the results screen it introduced; backend Shopping Receipt API (`POST /api/v1/spaces/{spaceId}/shopping-receipt/confirm`, `POST /api/v1/spaces/{spaceId}/shopping-receipt/reprocess`, `GET /api/v1/spaces/{spaceId}/overview`, documented in `api_contract.md`)
 > **Date:** 2026-09-12
 > **Objective:** Wire the results screen's "OK" and "Reprocess selected products" actions to the confirm/reprocess endpoints — reprocess loops back through a new read-only review screen before the user can confirm — and land a successful confirm on a new space overview screen showing every product currently in the space.

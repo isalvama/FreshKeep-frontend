@@ -357,6 +357,47 @@ void main() {
       );
     });
 
+    test(
+      'a 400 with a field-errors map (no detail) surfaces those field errors',
+      () async {
+        final repository = _buildRepository(
+          _JsonResponseAdapter(
+            statusCode: 400,
+            body: {
+              'title': 'Validation Error In Body Data',
+              'errors': {
+                'shoppingDate': 'must not be null',
+                'receiptImageId': 'must not be null',
+              },
+            },
+          ),
+        );
+
+        final result = await _confirmReceipt(repository);
+
+        final failure =
+            result.getLeft().toNullable() as ShoppingReceiptValidationFailure;
+        expect(failure.message, contains('shoppingDate: must not be null'));
+        expect(failure.message, contains('receiptImageId: must not be null'));
+      },
+    );
+
+    test(
+      'a 400 with neither detail nor field errors falls back to a '
+      'confirm-specific message, not the image-upload one',
+      () async {
+        final repository = _buildRepository(
+          _JsonResponseAdapter(statusCode: 400, body: {'title': 'Bad Request'}),
+        );
+
+        final result = await _confirmReceipt(repository);
+
+        final failure =
+            result.getLeft().toNullable() as ShoppingReceiptValidationFailure;
+        expect(failure.message, 'Please check the receipt details.');
+      },
+    );
+
     test('401 maps to ShoppingReceiptUnauthorizedFailure', () async {
       final repository = _buildRepository(
         _JsonResponseAdapter(statusCode: 401, body: {'detail': 'no token'}),
