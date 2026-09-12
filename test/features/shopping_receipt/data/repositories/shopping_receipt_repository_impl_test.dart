@@ -8,7 +8,11 @@ import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/data/datasources/shopping_receipt_remote_datasource.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/data/repositories/shopping_receipt_repository_impl.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_shopping_receipt.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/product_extraction.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/receipt_extraction_result.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
 
 class _JsonResponseAdapter implements HttpClientAdapter {
   _JsonResponseAdapter({required this.statusCode, this.body});
@@ -74,6 +78,45 @@ _processNewReceipt(ShoppingReceiptRepositoryImpl repository) {
     spaceId: 'space-1',
     imagePath: _tempImageFile.path,
     language: 'en',
+  );
+}
+
+const _fridge = StorageSpot(
+  id: 'spot-1',
+  name: 'Fridge',
+  type: StorageSpotType.fridge,
+);
+
+final _milk = ProductExtraction(
+  expirationDate: DateTime(2026, 9, 15),
+  productName: 'Milk',
+  suggestedStorageSpotId: 'spot-1',
+  productType: 'DAIRY',
+  priceAmount: 2.5,
+  currency: 'USD',
+);
+
+final _eggsWithNoSuggestedSpot = ProductExtraction(
+  expirationDate: DateTime(2026, 9, 20),
+  productName: 'Eggs',
+  suggestedStorageSpotId: null,
+  productType: 'DAIRY',
+  priceAmount: null,
+  currency: null,
+);
+
+Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+_confirmReceipt(
+  ShoppingReceiptRepositoryImpl repository, {
+  List<ProductExtraction>? allProducts,
+}) {
+  return repository.confirmReceipt(
+    spaceId: 'space-1',
+    receiptImageId: 'receipt-1',
+    shoppingDate: DateTime(2026, 9, 8),
+    storeName: 'SuperMart',
+    allProducts: allProducts ?? [_milk],
+    spaceStorageSpots: const [_fridge],
   );
 }
 
@@ -268,6 +311,192 @@ void main() {
         expect(
           adapter.capturedOptions?.contentType,
           startsWith('multipart/form-data'),
+        );
+      },
+    );
+  });
+
+  group('ShoppingReceiptRepositoryImpl.confirmReceipt status-code-to-failure mapping', () {
+    test('400 maps to ShoppingReceiptValidationFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 400, body: {'detail': 'bad body'}),
+      );
+
+      final result = await _confirmReceipt(repository);
+
+      expect(
+        result.getLeft().toNullable(),
+        isA<ShoppingReceiptValidationFailure>(),
+      );
+    });
+
+    test('401 maps to ShoppingReceiptUnauthorizedFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 401, body: {'detail': 'no token'}),
+      );
+
+      final result = await _confirmReceipt(repository);
+
+      expect(
+        result.getLeft().toNullable(),
+        isA<ShoppingReceiptUnauthorizedFailure>(),
+      );
+    });
+
+    test('403 maps to ShoppingReceiptForbiddenFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 403, body: {'detail': 'wrong role'}),
+      );
+
+      final result = await _confirmReceipt(repository);
+
+      expect(
+        result.getLeft().toNullable(),
+        isA<ShoppingReceiptForbiddenFailure>(),
+      );
+    });
+
+    test('409 maps to ShoppingReceiptConflictFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(
+          statusCode: 409,
+          body: {'detail': 'not a participant'},
+        ),
+      );
+
+      final result = await _confirmReceipt(repository);
+
+      expect(
+        result.getLeft().toNullable(),
+        isA<ShoppingReceiptConflictFailure>(),
+      );
+    });
+
+    test('422 maps to ShoppingReceiptUnprocessableFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(
+          statusCode: 422,
+          body: {'detail': 'AI could not process'},
+        ),
+      );
+
+      final result = await _confirmReceipt(repository);
+
+      expect(
+        result.getLeft().toNullable(),
+        isA<ShoppingReceiptUnprocessableFailure>(),
+      );
+    });
+
+    test('429 maps to ShoppingReceiptRateLimitedFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 429, body: {'detail': 'rate limit'}),
+      );
+
+      final result = await _confirmReceipt(repository);
+
+      expect(
+        result.getLeft().toNullable(),
+        isA<ShoppingReceiptRateLimitedFailure>(),
+      );
+    });
+
+    test('500 maps to ShoppingReceiptServerFailure', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 500, body: {'detail': 'boom'}),
+      );
+
+      final result = await _confirmReceipt(repository);
+
+      expect(
+        result.getLeft().toNullable(),
+        isA<ShoppingReceiptServerFailure>(),
+      );
+    });
+
+    test('connection error maps to ShoppingReceiptNetworkFailure', () async {
+      final repository = _buildRepository(_ConnectionErrorAdapter());
+
+      final result = await _confirmReceipt(repository);
+
+      expect(
+        result.getLeft().toNullable(),
+        isA<ShoppingReceiptNetworkFailure>(),
+      );
+    });
+  });
+
+  group('ShoppingReceiptRepositoryImpl.confirmReceipt success handling', () {
+    test(
+      'a successful call maps the response to a PersistedShoppingReceipt',
+      () async {
+        final repository = _buildRepository(
+          _JsonResponseAdapter(
+            statusCode: 201,
+            body: {
+              'id': 'shopping-receipt-1',
+              'shoppingDate': '2026-09-08',
+              'storeName': 'SuperMart',
+              'products': [
+                {
+                  'id': 'product-1',
+                  'productName': 'Milk',
+                  'expirationDate': '2026-09-15',
+                  'storageSpotId': 'spot-1',
+                  'productType': 'DAIRY',
+                  'priceAmount': 2.50,
+                  'currency': 'USD',
+                },
+              ],
+              'storageSpots': [
+                {
+                  'storageSpotId': 'spot-1',
+                  'storageSpotName': 'Fridge',
+                  'storageSpotType': 'FRIDGE',
+                },
+              ],
+            },
+          ),
+        );
+
+        final result = await _confirmReceipt(repository);
+
+        final persisted = result.getRight().toNullable();
+        expect(persisted, isNotNull);
+        expect(persisted!.id, 'shopping-receipt-1');
+        expect(persisted.storeName, 'SuperMart');
+        expect(persisted.products, hasLength(1));
+        expect(persisted.products.first.productName, 'Milk');
+        expect(persisted.storageSpots, hasLength(1));
+      },
+    );
+
+    test(
+      'a product with a null suggestedStorageSpotId is sent with the first '
+      'space storage spot as a fallback',
+      () async {
+        final adapter = _JsonResponseAdapter(
+          statusCode: 201,
+          body: {
+            'id': 'shopping-receipt-1',
+            'shoppingDate': '2026-09-08',
+            'storeName': 'SuperMart',
+            'products': <dynamic>[],
+            'storageSpots': <dynamic>[],
+          },
+        );
+        final repository = _buildRepository(adapter);
+
+        await _confirmReceipt(
+          repository,
+          allProducts: [_eggsWithNoSuggestedSpot],
+        );
+
+        final sentBody = adapter.capturedOptions?.data as Map<String, dynamic>;
+        final sentProducts = sentBody['allProducts'] as List<dynamic>;
+        expect(
+          (sentProducts.single as Map)['suggestedStorageSpotId'],
+          'spot-1',
         );
       },
     );

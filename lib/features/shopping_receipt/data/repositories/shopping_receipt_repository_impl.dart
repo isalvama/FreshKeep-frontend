@@ -2,6 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
 
 import '../../../../core/errors/failures.dart';
+import '../../../spaces/domain/entities/storage_spot.dart';
+import '../../domain/entities/persisted_shopping_receipt.dart';
+import '../../domain/entities/product_extraction.dart';
 import '../../domain/entities/receipt_extraction_result.dart';
 import '../../domain/repositories/shopping_receipt_repository.dart';
 import '../datasources/shopping_receipt_remote_datasource.dart';
@@ -22,6 +25,30 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
         spaceId: spaceId,
         imagePath: imagePath,
         language: language,
+      );
+      return Right(response.toEntity());
+    } on DioException catch (e) {
+      return Left(_mapDioException(e));
+    }
+  }
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> confirmReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) async {
+    try {
+      final response = await remoteDataSource.confirmReceipt(
+        spaceId: spaceId,
+        receiptImageId: receiptImageId,
+        shoppingDate: shoppingDate,
+        storeName: storeName,
+        allProducts: allProducts,
+        spaceStorageSpots: spaceStorageSpots,
       );
       return Right(response.toEntity());
     } on DioException catch (e) {

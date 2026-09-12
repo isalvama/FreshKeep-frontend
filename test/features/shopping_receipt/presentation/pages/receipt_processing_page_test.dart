@@ -5,12 +5,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_shopping_receipt.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/product_extraction.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/receipt_extraction_result.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/repositories/shopping_receipt_repository.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_processing_page.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:go_router/go_router.dart';
 
 class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
@@ -24,6 +26,17 @@ class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
     required String imagePath,
     required String language,
   }) => completer.future;
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  confirmReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
 }
 
 class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
@@ -38,6 +51,17 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
     required String imagePath,
     required String language,
   }) async => result;
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  confirmReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
 }
 
 final _extraction = ReceiptExtractionResult(
