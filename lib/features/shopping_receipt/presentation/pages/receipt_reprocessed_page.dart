@@ -1,0 +1,95 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/constants/ui_constants.dart';
+import '../../../spaces/domain/entities/storage_spot.dart';
+import '../../domain/entities/persisted_product.dart';
+import '../bloc/shopping_receipt_bloc.dart';
+
+class ReceiptReprocessedPage extends StatelessWidget {
+  const ReceiptReprocessedPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ShoppingReceiptBloc, ShoppingReceiptState>(
+      builder: (context, state) {
+        final receipt = state.reprocessedReceipt;
+        if (receipt == null) {
+          return const Scaffold(body: SizedBox.shrink());
+        }
+
+        final storageSpotsById = {
+          for (final spot in receipt.storageSpots) spot.id: spot,
+        };
+
+        return Scaffold(
+          appBar: AppBar(title: const Text('Receipt Details')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text(
+                receipt.storeName,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDate(receipt.shoppingDate),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              for (final product in receipt.products)
+                _ReprocessedProductTile(
+                  product: product,
+                  storageSpot: storageSpotsById[product.storageSpotId],
+                ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () =>
+                      context.go('/space-overview/${state.spaceId}'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: kCornerBorderRadius,
+                    ),
+                  ),
+                  child: const Text('OK'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _formatDate(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
+}
+
+class _ReprocessedProductTile extends StatelessWidget {
+  const _ReprocessedProductTile({
+    required this.product,
+    required this.storageSpot,
+  });
+
+  final PersistedProduct product;
+  final StorageSpot? storageSpot;
+
+  @override
+  Widget build(BuildContext context) {
+    final spotLabel = storageSpot?.name ?? 'No suggested spot';
+    return ListTile(
+      title: Text(product.productName),
+      subtitle: Text(
+        '${product.productType} · $spotLabel · '
+        'exp. ${_formatDate(product.expirationDate)}',
+      ),
+    );
+  }
+}

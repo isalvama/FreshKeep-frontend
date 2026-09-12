@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_product.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_shopping_receipt.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/product_extraction.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/receipt_extraction_result.dart';
@@ -11,21 +12,16 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/co
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/reprocess_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
-import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_error_page.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_reprocessed_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
 import 'package:go_router/go_router.dart';
 
 class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
-  _StubShoppingReceiptRepository(
-    this.result, {
-    this.confirmResult,
-    this.reprocessResult,
-  });
+  _StubShoppingReceiptRepository(this.processResult, this.reprocessResult);
 
-  final Either<ShoppingReceiptFailure, ReceiptExtractionResult> result;
-  final Either<ShoppingReceiptFailure, PersistedShoppingReceipt>?
-  confirmResult;
-  final Either<ShoppingReceiptFailure, PersistedShoppingReceipt>?
+  final Either<ShoppingReceiptFailure, ReceiptExtractionResult> processResult;
+  final Either<ShoppingReceiptFailure, PersistedShoppingReceipt>
   reprocessResult;
 
   @override
@@ -34,7 +30,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
     required String spaceId,
     required String imagePath,
     required String language,
-  }) async => result;
+  }) async => processResult;
 
   @override
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
@@ -45,7 +41,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
     required String storeName,
     required List<ProductExtraction> allProducts,
     required List<StorageSpot> spaceStorageSpots,
-  }) async => confirmResult!;
+  }) => throw UnimplementedError();
 
   @override
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
@@ -58,7 +54,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
     required List<ProductExtraction> flaggedProducts,
     required List<ProductExtraction> allProducts,
     required List<StorageSpot> spaceStorageSpots,
-  }) async => reprocessResult!;
+  }) async => reprocessResult;
 }
 
 final _extraction = ReceiptExtractionResult(
@@ -79,59 +75,43 @@ final _extraction = ReceiptExtractionResult(
   flaggedProducts: const [],
 );
 
-Future<ShoppingReceiptBloc> _buildFailedBloc(String message) async {
-  final repository = _StubShoppingReceiptRepository(
-    Left(ShoppingReceiptUnprocessableFailure(message)),
-  );
-  final bloc = ShoppingReceiptBloc(
-    processNewShoppingReceiptUseCase: ProcessNewShoppingReceiptUseCase(
-      repository,
-    ),
-    confirmShoppingReceiptUseCase: ConfirmShoppingReceiptUseCase(repository),
-    reprocessShoppingReceiptUseCase: ReprocessShoppingReceiptUseCase(
-      repository,
-    ),
-  );
-  bloc.add(const SpaceForReceiptSelected('space-1'));
-  bloc.add(const ReceiptImagePicked('/tmp/receipt.jpg'));
-  bloc.add(const ReceiptProcessingSubmitted());
-  await bloc.stream.firstWhere(
-    (state) => state.status is ShoppingReceiptProcessFailure,
-  );
-  return bloc;
-}
+const _fridge = StorageSpot(
+  id: 'spot-1',
+  name: 'Fridge',
+  type: StorageSpotType.fridge,
+);
 
-Future<ShoppingReceiptBloc> _buildConfirmFailedBloc(String message) async {
+final _persistedReceipt = PersistedShoppingReceipt(
+  id: 'shopping-receipt-1',
+  shoppingDate: DateTime(2026, 9, 8),
+  storeName: 'SuperMart',
+  products: [
+    PersistedProduct(
+      id: 'product-1',
+      productName: 'Milk',
+      expirationDate: DateTime(2026, 9, 15),
+      storageSpotId: 'spot-1',
+      productType: 'DAIRY',
+      priceAmount: 2.5,
+      currency: 'USD',
+    ),
+    PersistedProduct(
+      id: 'product-2',
+      productName: 'Bread',
+      expirationDate: DateTime(2026, 9, 20),
+      storageSpotId: null,
+      productType: 'BAKERY',
+      priceAmount: null,
+      currency: null,
+    ),
+  ],
+  storageSpots: const [_fridge],
+);
+
+Future<ShoppingReceiptBloc> _buildReprocessedBloc() async {
   final repository = _StubShoppingReceiptRepository(
     Right(_extraction),
-    confirmResult: Left(ShoppingReceiptServerFailure(message)),
-  );
-  final bloc = ShoppingReceiptBloc(
-    processNewShoppingReceiptUseCase: ProcessNewShoppingReceiptUseCase(
-      repository,
-    ),
-    confirmShoppingReceiptUseCase: ConfirmShoppingReceiptUseCase(repository),
-    reprocessShoppingReceiptUseCase: ReprocessShoppingReceiptUseCase(
-      repository,
-    ),
-  );
-  bloc.add(const SpaceForReceiptSelected('space-1'));
-  bloc.add(const ReceiptImagePicked('/tmp/receipt.jpg'));
-  bloc.add(const ReceiptProcessingSubmitted());
-  await bloc.stream.firstWhere(
-    (state) => state.status is ShoppingReceiptProcessSuccess,
-  );
-  bloc.add(const ReceiptConfirmSubmitted());
-  await bloc.stream.firstWhere(
-    (state) => state.status is ShoppingReceiptConfirmFailure,
-  );
-  return bloc;
-}
-
-Future<ShoppingReceiptBloc> _buildReprocessFailedBloc(String message) async {
-  final repository = _StubShoppingReceiptRepository(
-    Right(_extraction),
-    reprocessResult: Left(ShoppingReceiptRateLimitedFailure(message)),
+    Right(_persistedReceipt),
   );
   final bloc = ShoppingReceiptBloc(
     processNewShoppingReceiptUseCase: ProcessNewShoppingReceiptUseCase(
@@ -151,22 +131,23 @@ Future<ShoppingReceiptBloc> _buildReprocessFailedBloc(String message) async {
   bloc.add(const ReprocessSelectionToggled(0));
   bloc.add(const ReceiptReprocessSubmitted());
   await bloc.stream.firstWhere(
-    (state) => state.status is ShoppingReceiptReprocessFailure,
+    (state) => state.status is ShoppingReceiptReprocessSuccess,
   );
   return bloc;
 }
 
-Future<void> _pumpErrorPage(WidgetTester tester, ShoppingReceiptBloc bloc) {
+Future<void> _pumpReprocessedPage(WidgetTester tester, ShoppingReceiptBloc bloc) {
   final router = GoRouter(
-    initialLocation: '/process-receipt/error',
+    initialLocation: '/process-receipt/reprocessed-results',
     routes: [
       GoRoute(
-        path: '/process-receipt/error',
-        builder: (context, state) => const ReceiptErrorPage(),
+        path: '/process-receipt/reprocessed-results',
+        builder: (context, state) => const ReceiptReprocessedPage(),
       ),
       GoRoute(
-        path: '/home',
-        builder: (context, state) => const Text('HOME_MARKER'),
+        path: '/space-overview/:spaceId',
+        builder: (context, state) =>
+            Text('OVERVIEW_MARKER_${state.pathParameters['spaceId']}'),
       ),
     ],
   );
@@ -180,38 +161,45 @@ Future<void> _pumpErrorPage(WidgetTester tester, ShoppingReceiptBloc bloc) {
 }
 
 void main() {
-  testWidgets("shows the failure's message", (tester) async {
-    final bloc = await _buildFailedBloc("That doesn't look like a receipt.");
+  testWidgets('shows storeName and shoppingDate', (tester) async {
+    final bloc = await _buildReprocessedBloc();
 
-    await _pumpErrorPage(tester, bloc);
+    await _pumpReprocessedPage(tester, bloc);
 
-    expect(find.text("That doesn't look like a receipt."), findsOneWidget);
+    expect(find.text('SuperMart'), findsOneWidget);
+    expect(find.text('2026-09-08'), findsOneWidget);
   });
 
-  testWidgets('OK navigates to /home', (tester) async {
-    final bloc = await _buildFailedBloc('Network error.');
+  testWidgets(
+    'shows every product with its resolved storage spot, and no checkboxes '
+    'or reprocess controls',
+    (tester) async {
+      final bloc = await _buildReprocessedBloc();
 
-    await _pumpErrorPage(tester, bloc);
+      await _pumpReprocessedPage(tester, bloc);
+
+      expect(find.text('Milk'), findsOneWidget);
+      expect(find.textContaining('Fridge'), findsOneWidget);
+      expect(find.text('Bread'), findsOneWidget);
+      expect(find.textContaining('No suggested spot'), findsOneWidget);
+      expect(find.byType(CheckboxListTile), findsNothing);
+      expect(
+        find.widgetWithText(ElevatedButton, 'Reprocess selected products'),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('OK navigates to the space overview for the current space', (
+    tester,
+  ) async {
+    final bloc = await _buildReprocessedBloc();
+
+    await _pumpReprocessedPage(tester, bloc);
 
     await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
     await tester.pumpAndSettle();
 
-    expect(find.text('HOME_MARKER'), findsOneWidget);
-  });
-
-  testWidgets("shows a confirm failure's message", (tester) async {
-    final bloc = await _buildConfirmFailedBloc('Something went wrong.');
-
-    await _pumpErrorPage(tester, bloc);
-
-    expect(find.text('Something went wrong.'), findsOneWidget);
-  });
-
-  testWidgets("shows a reprocess failure's message", (tester) async {
-    final bloc = await _buildReprocessFailedBloc('Too many requests.');
-
-    await _pumpErrorPage(tester, bloc);
-
-    expect(find.text('Too many requests.'), findsOneWidget);
+    expect(find.text('OVERVIEW_MARKER_space-1'), findsOneWidget);
   });
 }

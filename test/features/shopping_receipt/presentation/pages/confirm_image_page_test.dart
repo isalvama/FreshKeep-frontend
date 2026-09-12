@@ -6,11 +6,16 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_shopping_receipt.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/product_extraction.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/receipt_extraction_result.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/repositories/shopping_receipt_repository.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/confirm_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/reprocess_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/confirm_image_page.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 
@@ -22,6 +27,30 @@ class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository
     required String spaceId,
     required String imagePath,
     required String language,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  confirmReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
   }) => throw UnimplementedError();
 }
 
@@ -36,15 +65,47 @@ class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
     required String imagePath,
     required String language,
   }) => completer.future;
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  confirmReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
 }
 
 ShoppingReceiptBloc _buildBlocWithImage(
   String imagePath, {
   ShoppingReceiptRepository? repository,
 }) {
+  final resolvedRepository =
+      repository ?? _NeverCalledShoppingReceiptRepository();
   final bloc = ShoppingReceiptBloc(
     processNewShoppingReceiptUseCase: ProcessNewShoppingReceiptUseCase(
-      repository ?? _NeverCalledShoppingReceiptRepository(),
+      resolvedRepository,
+    ),
+    confirmShoppingReceiptUseCase: ConfirmShoppingReceiptUseCase(
+      resolvedRepository,
+    ),
+    reprocessShoppingReceiptUseCase: ReprocessShoppingReceiptUseCase(
+      resolvedRepository,
     ),
   );
   bloc.add(const SpaceForReceiptSelected('space-1'));

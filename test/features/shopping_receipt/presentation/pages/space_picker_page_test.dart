@@ -5,12 +5,17 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_shopping_receipt.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/product_extraction.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/receipt_extraction_result.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/repositories/shopping_receipt_repository.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/confirm_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/process_new_shopping_receipt_usecase.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/reprocess_shopping_receipt_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/space_picker_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/repositories/space_repository.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/usecases/get_user_spaces_usecase.dart';
 import 'package:fresh_keep_frontend/features/spaces/presentation/bloc/spaces_bloc.dart';
@@ -25,6 +30,30 @@ class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository
     required String spaceId,
     required String imagePath,
     required String language,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  confirmReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  reprocessReceipt({
+    required String spaceId,
+    required String receiptImageId,
+    required DateTime shoppingDate,
+    required String storeName,
+    required String language,
+    required List<ProductExtraction> flaggedProducts,
+    required List<ProductExtraction> allProducts,
+    required List<StorageSpot> spaceStorageSpots,
   }) => throw UnimplementedError();
 }
 
@@ -73,9 +102,14 @@ Future<SpacesBloc> _seededSpacesBloc(List<Space> spaces) async {
 }
 
 ShoppingReceiptBloc _buildShoppingReceiptBloc() {
+  final repository = _NeverCalledShoppingReceiptRepository();
   return ShoppingReceiptBloc(
     processNewShoppingReceiptUseCase: ProcessNewShoppingReceiptUseCase(
-      _NeverCalledShoppingReceiptRepository(),
+      repository,
+    ),
+    confirmShoppingReceiptUseCase: ConfirmShoppingReceiptUseCase(repository),
+    reprocessShoppingReceiptUseCase: ReprocessShoppingReceiptUseCase(
+      repository,
     ),
   );
 }

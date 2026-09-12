@@ -10,9 +10,12 @@ class ReceiptErrorPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = context.watch<ShoppingReceiptBloc>().state.status;
-    final message = status is ShoppingReceiptProcessFailure
-        ? status.message
-        : 'Something went wrong.';
+    final message = switch (status) {
+      ShoppingReceiptProcessFailure(:final message) => message,
+      ShoppingReceiptConfirmFailure(:final message) => message,
+      ShoppingReceiptReprocessFailure(:final message) => message,
+      _ => 'Something went wrong.',
+    };
 
     return Scaffold(
       body: Center(
