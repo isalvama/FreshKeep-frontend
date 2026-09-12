@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/ui_constants.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
@@ -11,7 +12,36 @@ class ReceiptResultsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<ShoppingReceiptBloc, ShoppingReceiptState>(
+    return BlocConsumer<ShoppingReceiptBloc, ShoppingReceiptState>(
+      listenWhen: (previous, current) {
+        final confirmedJustNow =
+            previous.status is! ShoppingReceiptConfirmSuccess &&
+            current.status is ShoppingReceiptConfirmSuccess;
+        final reprocessedJustNow =
+            previous.status is! ShoppingReceiptReprocessSuccess &&
+            current.status is ShoppingReceiptReprocessSuccess;
+        final failureCountChanged =
+            previous.consecutiveFailureCount != current.consecutiveFailureCount;
+        return confirmedJustNow || reprocessedJustNow || failureCountChanged;
+      },
+      listener: (context, state) {
+        final status = state.status;
+        if (status is ShoppingReceiptConfirmSuccess) {
+          context.go('/space-overview/${state.spaceId}');
+          return;
+        }
+        if (status is ShoppingReceiptReprocessSuccess) {
+          context.push('/process-receipt/reprocessed-results');
+          return;
+        }
+        if (state.consecutiveFailureCount >= 2) {
+          context.push('/process-receipt/error');
+        } else if (state.consecutiveFailureCount == 1) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_failureMessage(status))),
+          );
+        }
+      },
       builder: (context, state) {
         final result = state.extraction;
         if (result == null) {
@@ -142,6 +172,12 @@ class ReceiptResultsPage extends StatelessWidget {
       },
     );
   }
+}
+
+String _failureMessage(ShoppingReceiptStatus status) {
+  if (status is ShoppingReceiptConfirmFailure) return status.message;
+  if (status is ShoppingReceiptReprocessFailure) return status.message;
+  return 'Something went wrong.';
 }
 
 String _formatDate(DateTime date) {

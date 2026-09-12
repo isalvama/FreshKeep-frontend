@@ -16,6 +16,7 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_results_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
+import 'package:go_router/go_router.dart';
 
 class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   _StubShoppingReceiptRepository(
@@ -154,10 +155,33 @@ Future<ShoppingReceiptBloc> _buildSucceededBloc({
 }
 
 Future<void> _pumpResultsPage(WidgetTester tester, ShoppingReceiptBloc bloc) {
+  final router = GoRouter(
+    initialLocation: '/process-receipt/results',
+    routes: [
+      GoRoute(
+        path: '/process-receipt/results',
+        builder: (context, state) => const ReceiptResultsPage(),
+      ),
+      GoRoute(
+        path: '/process-receipt/reprocessed-results',
+        builder: (context, state) => const Text('REPROCESSED_MARKER'),
+      ),
+      GoRoute(
+        path: '/process-receipt/error',
+        builder: (context, state) => const Text('ERROR_MARKER'),
+      ),
+      GoRoute(
+        path: '/space-overview/:spaceId',
+        builder: (context, state) =>
+            Text('OVERVIEW_MARKER_${state.pathParameters['spaceId']}'),
+      ),
+    ],
+  );
+
   return tester.pumpWidget(
     BlocProvider<ShoppingReceiptBloc>.value(
       value: bloc,
-      child: const MaterialApp(home: ReceiptResultsPage()),
+      child: MaterialApp.router(routerConfig: router),
     ),
   );
 }
@@ -260,26 +284,31 @@ void main() {
     },
   );
 
-  testWidgets('tapping OK dispatches a confirm action', (tester) async {
-    final persisted = PersistedShoppingReceipt(
-      id: 'shopping-receipt-1',
-      shoppingDate: DateTime(2026, 9, 8),
-      storeName: 'SuperMart',
-      products: const [],
-      storageSpots: const [],
-    );
-    final bloc = await _buildSucceededBloc(confirmResult: Right(persisted));
+  testWidgets(
+    'tapping OK dispatches a confirm action and navigates to the space overview',
+    (tester) async {
+      final persisted = PersistedShoppingReceipt(
+        id: 'shopping-receipt-1',
+        shoppingDate: DateTime(2026, 9, 8),
+        storeName: 'SuperMart',
+        products: const [],
+        storageSpots: const [],
+      );
+      final bloc = await _buildSucceededBloc(confirmResult: Right(persisted));
 
-    await _pumpResultsPage(tester, bloc);
+      await _pumpResultsPage(tester, bloc);
 
-    await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+      await tester.pumpAndSettle();
 
-    expect(bloc.state.status, isA<ShoppingReceiptConfirmSuccess>());
-  });
+      expect(bloc.state.status, isA<ShoppingReceiptConfirmSuccess>());
+      expect(find.text('OVERVIEW_MARKER_space-1'), findsOneWidget);
+    },
+  );
 
   testWidgets(
-    'tapping Reprocess selected products dispatches a reprocess action',
+    'tapping Reprocess selected products dispatches a reprocess action and '
+    'navigates to the reprocessed-results screen',
     (tester) async {
       final persisted = PersistedShoppingReceipt(
         id: 'shopping-receipt-1',
@@ -302,6 +331,79 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(bloc.state.reprocessedReceipt, persisted);
+      expect(find.text('REPROCESSED_MARKER'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a further unrelated state change after ReprocessSuccess does not re-navigate',
+    (tester) async {
+      final persisted = PersistedShoppingReceipt(
+        id: 'shopping-receipt-1',
+        shoppingDate: DateTime(2026, 9, 8),
+        storeName: 'SuperMart',
+        products: const [],
+        storageSpots: const [],
+      );
+      final bloc = await _buildSucceededBloc(
+        reprocessResult: Right(persisted),
+      );
+
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pump();
+      await tester.tap(
+        find.widgetWithText(ElevatedButton, 'Reprocess selected products'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('REPROCESSED_MARKER'), findsOneWidget);
+
+      bloc.add(const ReprocessSelectionToggled(1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('REPROCESSED_MARKER'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'the first confirm failure shows an inline SnackBar and stays on Results',
+    (tester) async {
+      const failure = ShoppingReceiptServerFailure('Something went wrong.');
+      final bloc = await _buildSucceededBloc(
+        confirmResult: const Left(failure),
+      );
+
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Something went wrong.'), findsOneWidget);
+      expect(find.byType(ReceiptResultsPage), findsOneWidget);
+      expect(bloc.state.consecutiveFailureCount, 1);
+    },
+  );
+
+  testWidgets(
+    'a second consecutive failure navigates to the error screen',
+    (tester) async {
+      const failure = ShoppingReceiptServerFailure('Something went wrong.');
+      final bloc = await _buildSucceededBloc(
+        confirmResult: const Left(failure),
+      );
+
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+      await tester.pumpAndSettle();
+      expect(bloc.state.consecutiveFailureCount, 1);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ERROR_MARKER'), findsOneWidget);
     },
   );
 
