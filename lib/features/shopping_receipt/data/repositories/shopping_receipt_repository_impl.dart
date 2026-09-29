@@ -35,13 +35,24 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
           validationFallback: 'Please check the selected image.',
         ),
       );
+    } on TypeError {
+      // A required field (e.g. shoppingReceiptId) is missing or mistyped.
+      return const Left(_unexpectedResponseFailure);
+    } on FormatException {
+      // A date field could not be parsed.
+      return const Left(_unexpectedResponseFailure);
     }
   }
+
+  static const _unexpectedResponseFailure = ShoppingReceiptServerFailure(
+    'Unexpected response from the server. Please try again.',
+  );
 
   @override
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -51,6 +62,7 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
     try {
       final response = await remoteDataSource.confirmReceipt(
         spaceId: spaceId,
+        shoppingReceiptId: shoppingReceiptId,
         receiptImageId: receiptImageId,
         shoppingDate: shoppingDate,
         storeName: storeName,
@@ -67,6 +79,7 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -78,6 +91,7 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
     try {
       final response = await remoteDataSource.reprocessReceipt(
         spaceId: spaceId,
+        shoppingReceiptId: shoppingReceiptId,
         receiptImageId: receiptImageId,
         shoppingDate: shoppingDate,
         storeName: storeName,

@@ -26,6 +26,15 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   reprocessResults;
   int _confirmCallCount = 0;
   int _reprocessCallCount = 0;
+  String? confirmedShoppingReceiptId;
+  String? reprocessedShoppingReceiptId;
+  DateTime? confirmedShoppingDate;
+  String? confirmedStoreName;
+  List<ProductExtraction>? confirmedAllProducts;
+  DateTime? reprocessedShoppingDate;
+  String? reprocessedStoreName;
+  List<ProductExtraction>? reprocessedFlaggedProducts;
+  List<ProductExtraction>? reprocessedAllProducts;
 
   @override
   Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>>
@@ -39,12 +48,17 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
     required List<ProductExtraction> allProducts,
     required List<StorageSpot> spaceStorageSpots,
   }) async {
+    confirmedShoppingReceiptId = shoppingReceiptId;
+    confirmedShoppingDate = shoppingDate;
+    confirmedStoreName = storeName;
+    confirmedAllProducts = allProducts;
     final result = confirmResults[_confirmCallCount];
     if (_confirmCallCount < confirmResults.length - 1) _confirmCallCount++;
     return result;
@@ -54,6 +68,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -62,6 +77,11 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
     required List<ProductExtraction> allProducts,
     required List<StorageSpot> spaceStorageSpots,
   }) async {
+    reprocessedShoppingReceiptId = shoppingReceiptId;
+    reprocessedShoppingDate = shoppingDate;
+    reprocessedStoreName = storeName;
+    reprocessedFlaggedProducts = flaggedProducts;
+    reprocessedAllProducts = allProducts;
     final result = reprocessResults[_reprocessCallCount];
     if (_reprocessCallCount < reprocessResults.length - 1) {
       _reprocessCallCount++;
@@ -71,6 +91,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
 }
 
 final _extraction = ReceiptExtractionResult(
+  shoppingReceiptId: 'shopping-receipt-1',
   receiptImageId: 'receipt-1',
   suggestedStorageSpots: const [],
   purchaseShoppingDate: DateTime(2026, 9, 8),
@@ -109,11 +130,14 @@ final _persistedReceipt = PersistedShoppingReceipt(
 ShoppingReceiptBloc _buildBloc(
   Either<ShoppingReceiptFailure, ReceiptExtractionResult> processResult, {
   List<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
-  confirmResults = const [],
+      confirmResults =
+      const [],
   List<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
-  reprocessResults = const [],
+      reprocessResults =
+      const [],
+  _StubShoppingReceiptRepository? repository,
 }) {
-  final repository = _StubShoppingReceiptRepository(
+  repository ??= _StubShoppingReceiptRepository(
     processResult: processResult,
     confirmResults: confirmResults,
     reprocessResults: reprocessResults,
@@ -131,14 +155,18 @@ ShoppingReceiptBloc _buildBloc(
 
 Future<ShoppingReceiptBloc> _buildBlocAtProcessSuccess({
   List<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
-  confirmResults = const [],
+      confirmResults =
+      const [],
   List<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
-  reprocessResults = const [],
+      reprocessResults =
+      const [],
+  _StubShoppingReceiptRepository? repository,
 }) async {
   final bloc = _buildBloc(
     Right(_extraction),
     confirmResults: confirmResults,
     reprocessResults: reprocessResults,
+    repository: repository,
   );
   bloc.add(const SpaceForReceiptSelected('space-1'));
   bloc.add(const ReceiptImagePicked('/tmp/receipt.jpg'));
@@ -205,7 +233,10 @@ void main() {
         (state) => state.status is ShoppingReceiptProcessSuccess,
       );
 
-      expect(emittedStatuses.whereType<ShoppingReceiptProcessing>(), hasLength(1));
+      expect(
+        emittedStatuses.whereType<ShoppingReceiptProcessing>(),
+        hasLength(1),
+      );
       expect(bloc.state.status, isA<ShoppingReceiptProcessSuccess>());
       expect(bloc.state.extraction, _extraction);
 
@@ -213,6 +244,45 @@ void main() {
       await bloc.close();
     },
   );
+
+  test('ProcessSuccess seeds shoppingDate/storeName from the extraction, '
+      'computes flaggedIndices, and starts with no pending edits', () async {
+    final bread = ProductExtraction(
+      expirationDate: DateTime(2026, 9, 12),
+      productName: 'Bread',
+      suggestedStorageSpotId: 'spot-2',
+      productType: 'BAKERY',
+      priceAmount: 1.2,
+      currency: 'USD',
+    );
+    final extraction = ReceiptExtractionResult(
+      shoppingReceiptId: 'shopping-receipt-1',
+      receiptImageId: 'receipt-1',
+      suggestedStorageSpots: const [],
+      purchaseShoppingDate: DateTime(2026, 9, 8),
+      storeName: 'SuperMart',
+      productExtractions: [_extraction.productExtractions.first, bread],
+      flaggedProducts: [bread],
+    );
+    final bloc = _buildBloc(Right(extraction));
+
+    bloc.add(const SpaceForReceiptSelected('space-1'));
+    bloc.add(const ReceiptImagePicked('/tmp/receipt.jpg'));
+    bloc.add(const ReceiptProcessingSubmitted());
+    await bloc.stream.firstWhere(
+      (state) => state.status is ShoppingReceiptProcessSuccess,
+    );
+
+    expect(bloc.state.shoppingDate, DateTime(2026, 9, 8));
+    expect(bloc.state.storeName, 'SuperMart');
+    expect(bloc.state.flaggedIndices, {1});
+    expect(bloc.state.editedExpirationDates, isEmpty);
+    expect(bloc.state.hasPendingEdits, isFalse);
+    expect(bloc.state.displayedExpirationDate(0), DateTime(2026, 9, 15));
+    expect(bloc.state.displayedExpirationDate(1), DateTime(2026, 9, 12));
+
+    await bloc.close();
+  });
 
   test(
     'ReceiptProcessingSubmitted emits Processing then ProcessFailure on failure',
@@ -234,7 +304,10 @@ void main() {
         (state) => state.status is ShoppingReceiptProcessFailure,
       );
 
-      expect(emittedStatuses.whereType<ShoppingReceiptProcessing>(), hasLength(1));
+      expect(
+        emittedStatuses.whereType<ShoppingReceiptProcessing>(),
+        hasLength(1),
+      );
       final failureStatus =
           emittedStatuses.last as ShoppingReceiptProcessFailure;
       expect(failureStatus.message, failure.message);
@@ -280,9 +353,7 @@ void main() {
     'ShoppingReceiptFlowReset clears extraction, reprocessedReceipt, and the failure counter',
     () async {
       final bloc = await _buildBlocAtProcessSuccess(
-        confirmResults: [
-          const Left(ShoppingReceiptServerFailure('boom')),
-        ],
+        confirmResults: [const Left(ShoppingReceiptServerFailure('boom'))],
         reprocessResults: [Right(_persistedReceipt)],
       );
 
@@ -324,7 +395,10 @@ void main() {
         (state) => state.status is ShoppingReceiptConfirmSuccess,
       );
 
-      expect(emittedStatuses.whereType<ShoppingReceiptConfirming>(), hasLength(1));
+      expect(
+        emittedStatuses.whereType<ShoppingReceiptConfirming>(),
+        hasLength(1),
+      );
       expect(bloc.state.consecutiveFailureCount, 0);
       // extraction is retained so the Results screen keeps rendering.
       expect(bloc.state.extraction, _extraction);
@@ -347,8 +421,7 @@ void main() {
         (state) => state.status is ShoppingReceiptConfirmFailure,
       );
 
-      final failureStatus =
-          bloc.state.status as ShoppingReceiptConfirmFailure;
+      final failureStatus = bloc.state.status as ShoppingReceiptConfirmFailure;
       expect(failureStatus.message, failure.message);
       expect(bloc.state.consecutiveFailureCount, 1);
       // extraction is retained so the Results screen keeps rendering.
@@ -358,32 +431,32 @@ void main() {
     },
   );
 
-  test(
-    'ReceiptReprocessSubmitted emits Reprocessing then ReprocessSuccess, '
-    'stores reprocessedReceipt, and resets the failure counter',
-    () async {
-      final bloc = await _buildBlocAtProcessSuccess(
-        reprocessResults: [Right(_persistedReceipt)],
-      );
-      final emittedStatuses = <Object>[];
-      final subscription = bloc.stream.listen(
-        (state) => emittedStatuses.add(state.status),
-      );
+  test('ReceiptReprocessSubmitted emits Reprocessing then ReprocessSuccess, '
+      'stores reprocessedReceipt, and resets the failure counter', () async {
+    final bloc = await _buildBlocAtProcessSuccess(
+      reprocessResults: [Right(_persistedReceipt)],
+    );
+    final emittedStatuses = <Object>[];
+    final subscription = bloc.stream.listen(
+      (state) => emittedStatuses.add(state.status),
+    );
 
-      bloc.add(const ReprocessSelectionToggled(0));
-      bloc.add(const ReceiptReprocessSubmitted());
-      await bloc.stream.firstWhere(
-        (state) => state.status is ShoppingReceiptReprocessSuccess,
-      );
+    bloc.add(const ReprocessSelectionToggled(0));
+    bloc.add(const ReceiptReprocessSubmitted());
+    await bloc.stream.firstWhere(
+      (state) => state.status is ShoppingReceiptReprocessSuccess,
+    );
 
-      expect(emittedStatuses.whereType<ShoppingReceiptReprocessing>(), hasLength(1));
-      expect(bloc.state.reprocessedReceipt, _persistedReceipt);
-      expect(bloc.state.consecutiveFailureCount, 0);
+    expect(
+      emittedStatuses.whereType<ShoppingReceiptReprocessing>(),
+      hasLength(1),
+    );
+    expect(bloc.state.reprocessedReceipt, _persistedReceipt);
+    expect(bloc.state.consecutiveFailureCount, 0);
 
-      await subscription.cancel();
-      await bloc.close();
-    },
-  );
+    await subscription.cancel();
+    await bloc.close();
+  });
 
   test(
     'ReceiptReprocessSubmitted emits Reprocessing then ReprocessFailure and increments the failure counter',
@@ -436,29 +509,284 @@ void main() {
   );
 
   test(
-    'a success after a failure resets the counter back to 0',
+    'confirm and reprocess pass the extraction\'s shoppingReceiptId to the use cases',
     () async {
-      const confirmFailure = ShoppingReceiptServerFailure('boom');
-      final bloc = await _buildBlocAtProcessSuccess(
-        confirmResults: [
-          const Left(confirmFailure),
-          Right(_persistedReceipt),
-        ],
+      final repository = _StubShoppingReceiptRepository(
+        processResult: Right(_extraction),
+        confirmResults: [const Left(ShoppingReceiptServerFailure('boom'))],
+        reprocessResults: [const Left(ShoppingReceiptServerFailure('boom'))],
       );
+      final bloc = await _buildBlocAtProcessSuccess(repository: repository);
 
       bloc.add(const ReceiptConfirmSubmitted());
       await bloc.stream.firstWhere(
         (state) => state.status is ShoppingReceiptConfirmFailure,
       );
-      expect(bloc.state.consecutiveFailureCount, 1);
+      expect(repository.confirmedShoppingReceiptId, 'shopping-receipt-1');
+
+      bloc.add(const ReprocessSelectionToggled(0));
+      bloc.add(const ReceiptReprocessSubmitted());
+      await bloc.stream.firstWhere(
+        (state) => state.status is ShoppingReceiptReprocessFailure,
+      );
+      expect(repository.reprocessedShoppingReceiptId, 'shopping-receipt-1');
+
+      bloc.close();
+    },
+  );
+
+  group('edit events', () {
+    test(
+      'ReceiptShoppingDateEdited updates shoppingDate and toggles hasPendingEdits',
+      () async {
+        final bloc = await _buildBlocAtProcessSuccess();
+
+        bloc.add(ReceiptShoppingDateEdited(DateTime(2026, 9, 10)));
+        await bloc.stream.first;
+        expect(bloc.state.shoppingDate, DateTime(2026, 9, 10));
+        expect(bloc.state.hasPendingEdits, isTrue);
+
+        bloc.add(ReceiptShoppingDateEdited(DateTime(2026, 9, 8)));
+        await bloc.stream.first;
+        expect(bloc.state.hasPendingEdits, isFalse);
+
+        await bloc.close();
+      },
+    );
+
+    test(
+      'ReceiptStoreNameEdited updates storeName and toggles hasPendingEdits',
+      () async {
+        final bloc = await _buildBlocAtProcessSuccess();
+
+        bloc.add(const ReceiptStoreNameEdited('MegaMart'));
+        await bloc.stream.first;
+        expect(bloc.state.storeName, 'MegaMart');
+        expect(bloc.state.hasPendingEdits, isTrue);
+
+        bloc.add(const ReceiptStoreNameEdited('SuperMart'));
+        await bloc.stream.first;
+        expect(bloc.state.hasPendingEdits, isFalse);
+
+        await bloc.close();
+      },
+    );
+
+    test('ProductExpirationDateEdited stores a differing date and removes the '
+        'entry when the original date is picked again', () async {
+      final bloc = await _buildBlocAtProcessSuccess();
+
+      bloc.add(ProductExpirationDateEdited(0, DateTime(2026, 9, 20)));
+      await bloc.stream.first;
+      expect(bloc.state.editedExpirationDates, {0: DateTime(2026, 9, 20)});
+      expect(bloc.state.hasPendingEdits, isTrue);
+      expect(bloc.state.displayedExpirationDate(0), DateTime(2026, 9, 20));
+
+      bloc.add(ProductExpirationDateEdited(0, DateTime(2026, 9, 15)));
+      await bloc.stream.first;
+      expect(bloc.state.editedExpirationDates, isEmpty);
+      expect(bloc.state.hasPendingEdits, isFalse);
+
+      await bloc.close();
+    });
+
+    test(
+      'displayedExpirationDate shifts unedited products by the shopping-date '
+      'change and leaves edited products as chosen',
+      () async {
+        final bread = ProductExtraction(
+          expirationDate: DateTime(2026, 9, 12),
+          productName: 'Bread',
+          suggestedStorageSpotId: 'spot-1',
+          productType: 'BAKERY',
+          priceAmount: 1.2,
+          currency: 'USD',
+        );
+        final extraction = ReceiptExtractionResult(
+          shoppingReceiptId: 'shopping-receipt-1',
+          receiptImageId: 'receipt-1',
+          suggestedStorageSpots: const [],
+          purchaseShoppingDate: DateTime(2026, 9, 8),
+          storeName: 'SuperMart',
+          productExtractions: [_extraction.productExtractions.first, bread],
+          flaggedProducts: const [],
+        );
+        final bloc = _buildBloc(Right(extraction));
+        bloc.add(const SpaceForReceiptSelected('space-1'));
+        bloc.add(const ReceiptImagePicked('/tmp/receipt.jpg'));
+        bloc.add(const ReceiptProcessingSubmitted());
+        await bloc.stream.firstWhere(
+          (state) => state.status is ShoppingReceiptProcessSuccess,
+        );
+
+        bloc.add(ProductExpirationDateEdited(1, DateTime(2026, 9, 30)));
+        await bloc.stream.first;
+        bloc.add(ReceiptShoppingDateEdited(DateTime(2026, 9, 5)));
+        await bloc.stream.first;
+
+        // Milk (unedited): 2026-09-15 shifted by -3 days.
+        expect(bloc.state.displayedExpirationDate(0), DateTime(2026, 9, 12));
+        // Bread (edited): stays at the chosen date.
+        expect(bloc.state.displayedExpirationDate(1), DateTime(2026, 9, 30));
+        // The original extraction is never mutated.
+        expect(bloc.state.extraction, extraction);
+
+        await bloc.close();
+      },
+    );
+  });
+
+  group('wire rule', () {
+    final milk = _extraction.productExtractions.first;
+    final bread = ProductExtraction(
+      expirationDate: DateTime(2026, 9, 12),
+      productName: 'Bread',
+      suggestedStorageSpotId: 'spot-1',
+      productType: 'BAKERY',
+      priceAmount: 1.2,
+      currency: 'USD',
+    );
+    final twoProductExtraction = ReceiptExtractionResult(
+      shoppingReceiptId: 'shopping-receipt-1',
+      receiptImageId: 'receipt-1',
+      suggestedStorageSpots: const [],
+      purchaseShoppingDate: DateTime(2026, 9, 8),
+      storeName: 'SuperMart',
+      productExtractions: [milk, bread],
+      flaggedProducts: const [],
+    );
+
+    Future<ShoppingReceiptBloc> buildEditedBloc(
+      _StubShoppingReceiptRepository repository,
+    ) async {
+      final bloc = _buildBloc(
+        Right(twoProductExtraction),
+        repository: repository,
+      );
+      bloc.add(const SpaceForReceiptSelected('space-1'));
+      bloc.add(const ReceiptImagePicked('/tmp/receipt.jpg'));
+      bloc.add(const ReceiptProcessingSubmitted());
+      await bloc.stream.firstWhere(
+        (state) => state.status is ShoppingReceiptProcessSuccess,
+      );
+      bloc.add(ReceiptShoppingDateEdited(DateTime(2026, 9, 5)));
+      bloc.add(const ReceiptStoreNameEdited('MegaMart'));
+      bloc.add(ProductExpirationDateEdited(1, DateTime(2026, 9, 30)));
+      await bloc.stream.firstWhere(
+        (state) => state.editedExpirationDates.isNotEmpty,
+      );
+      return bloc;
+    }
+
+    test('confirm sends the edited shopping date/store name, edited products '
+        'with their chosen date and flag true, and unedited products with '
+        'their ORIGINAL date and flag false', () async {
+      final repository = _StubShoppingReceiptRepository(
+        processResult: Right(twoProductExtraction),
+        confirmResults: [Right(_persistedReceipt)],
+      );
+      final bloc = await buildEditedBloc(repository);
 
       bloc.add(const ReceiptConfirmSubmitted());
       await bloc.stream.firstWhere(
         (state) => state.status is ShoppingReceiptConfirmSuccess,
       );
-      expect(bloc.state.consecutiveFailureCount, 0);
 
-      bloc.close();
-    },
-  );
+      expect(repository.confirmedShoppingDate, DateTime(2026, 9, 5));
+      expect(repository.confirmedStoreName, 'MegaMart');
+      final sent = repository.confirmedAllProducts!;
+      // Milk: displayed shifted to 2026-09-12, but sent with its original date.
+      expect(sent[0], milk);
+      expect(sent[0].manuallyEditedExpirationDate, isFalse);
+      expect(sent[1].expirationDate, DateTime(2026, 9, 30));
+      expect(sent[1].manuallyEditedExpirationDate, isTrue);
+
+      await bloc.close();
+    });
+
+    test('confirm with no edits sends exactly the extracted values', () async {
+      final repository = _StubShoppingReceiptRepository(
+        processResult: Right(twoProductExtraction),
+        confirmResults: [Right(_persistedReceipt)],
+      );
+      final bloc = _buildBloc(
+        Right(twoProductExtraction),
+        repository: repository,
+      );
+      bloc.add(const SpaceForReceiptSelected('space-1'));
+      bloc.add(const ReceiptImagePicked('/tmp/receipt.jpg'));
+      bloc.add(const ReceiptProcessingSubmitted());
+      await bloc.stream.firstWhere(
+        (state) => state.status is ShoppingReceiptProcessSuccess,
+      );
+
+      bloc.add(const ReceiptConfirmSubmitted());
+      await bloc.stream.firstWhere(
+        (state) => state.status is ShoppingReceiptConfirmSuccess,
+      );
+
+      expect(repository.confirmedShoppingDate, DateTime(2026, 9, 8));
+      expect(repository.confirmedStoreName, 'SuperMart');
+      expect(repository.confirmedAllProducts, [milk, bread]);
+
+      await bloc.close();
+    });
+
+    test('reprocess after edits sends only original values with every flag '
+        'false, and discards the edits', () async {
+      final repository = _StubShoppingReceiptRepository(
+        processResult: Right(twoProductExtraction),
+        reprocessResults: [const Left(ShoppingReceiptServerFailure('boom'))],
+      );
+      final bloc = await buildEditedBloc(repository);
+
+      bloc.add(const ReprocessSelectionToggled(1));
+      bloc.add(const ReceiptReprocessSubmitted());
+      final reprocessing = await bloc.stream.firstWhere(
+        (state) => state.status is ShoppingReceiptReprocessing,
+      );
+      expect(reprocessing.hasPendingEdits, isFalse);
+      await bloc.stream.firstWhere(
+        (state) => state.status is ShoppingReceiptReprocessFailure,
+      );
+
+      expect(repository.reprocessedShoppingDate, DateTime(2026, 9, 8));
+      expect(repository.reprocessedStoreName, 'SuperMart');
+      expect(repository.reprocessedAllProducts, [milk, bread]);
+      expect(repository.reprocessedFlaggedProducts, [bread]);
+      for (final product in [
+        ...repository.reprocessedAllProducts!,
+        ...repository.reprocessedFlaggedProducts!,
+      ]) {
+        expect(product.manuallyEditedExpirationDate, isFalse);
+      }
+      // Edits stay discarded after a failed reprocess.
+      expect(bloc.state.hasPendingEdits, isFalse);
+      expect(bloc.state.shoppingDate, DateTime(2026, 9, 8));
+      expect(bloc.state.storeName, 'SuperMart');
+
+      await bloc.close();
+    });
+  });
+
+  test('a success after a failure resets the counter back to 0', () async {
+    const confirmFailure = ShoppingReceiptServerFailure('boom');
+    final bloc = await _buildBlocAtProcessSuccess(
+      confirmResults: [const Left(confirmFailure), Right(_persistedReceipt)],
+    );
+
+    bloc.add(const ReceiptConfirmSubmitted());
+    await bloc.stream.firstWhere(
+      (state) => state.status is ShoppingReceiptConfirmFailure,
+    );
+    expect(bloc.state.consecutiveFailureCount, 1);
+
+    bloc.add(const ReceiptConfirmSubmitted());
+    await bloc.stream.firstWhere(
+      (state) => state.status is ShoppingReceiptConfirmSuccess,
+    );
+    expect(bloc.state.consecutiveFailureCount, 0);
+
+    bloc.close();
+  });
 }

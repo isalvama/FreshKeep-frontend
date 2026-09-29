@@ -3,6 +3,7 @@ import '../../domain/entities/receipt_extraction_result.dart';
 import 'product_extraction_response_model.dart';
 
 class ReceiptExtractionResponseModel {
+  final String shoppingReceiptId;
   final String receiptImageId;
   final List<StorageSpotResponseModel> suggestedStorageSpots;
   final DateTime purchaseShoppingDate;
@@ -11,6 +12,7 @@ class ReceiptExtractionResponseModel {
   final List<ProductExtractionResponseModel> flaggedProducts;
 
   const ReceiptExtractionResponseModel({
+    required this.shoppingReceiptId,
     required this.receiptImageId,
     required this.suggestedStorageSpots,
     required this.purchaseShoppingDate,
@@ -21,12 +23,12 @@ class ReceiptExtractionResponseModel {
 
   factory ReceiptExtractionResponseModel.fromJson(Map<String, dynamic> json) {
     return ReceiptExtractionResponseModel(
+      shoppingReceiptId: json['shoppingReceiptId'] as String,
       receiptImageId: json['receiptImageId'] as String,
       suggestedStorageSpots: (json['suggestedStorageSpots'] as List<dynamic>)
           .map(
-            (spot) => StorageSpotResponseModel.fromJson(
-              spot as Map<String, dynamic>,
-            ),
+            (spot) =>
+                StorageSpotResponseModel.fromJson(spot as Map<String, dynamic>),
           )
           .toList(),
       purchaseShoppingDate: DateTime.parse(
@@ -52,6 +54,7 @@ class ReceiptExtractionResponseModel {
 
   ReceiptExtractionResult toEntity() {
     return ReceiptExtractionResult(
+      shoppingReceiptId: shoppingReceiptId,
       receiptImageId: receiptImageId,
       suggestedStorageSpots: suggestedStorageSpots
           .map((spot) => spot.toEntity())

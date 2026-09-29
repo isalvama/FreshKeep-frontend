@@ -15,6 +15,8 @@ All three endpoints consume/produce `application/json`.
 1. **`register/user` and `register/admin` no longer return a JWT.** They now return `{ accountId, email }` only — no `jwtString`, no `expiresIn`. If the current frontend auto-logs-in a user right after registration using the token from the register response, that will break: **the client must now call `POST /api/v1/auth/login` as a separate step right after a successful registration** to obtain a session token.
 2. **Login's JWT now carries two extra claims**: `userId` and `adminId` (see [JWT claims](#jwt-claims)). If the frontend decodes the token client-side, these are now available — `userId`/`adminId` are `null` in the claim when the account doesn't have the corresponding role.
 3. **Admin login is currently non-functional.** Any account with the `ADMIN` role will always fail `POST /login` with a `500` (see [Known limitation](#known-limitation-admin-login-always-fails)). This includes the account created via `register/admin`. Do not build/test an admin-facing flow against this yet.
+4. **The JWT `roles` claim carries the `ROLE_` prefix** — e.g. `["ROLE_USER"]`, not `["USER"]` (see [JWT claims](#jwt-claims)). Client-side role checks against decoded tokens must account for the prefix (the backend strips it again when parsing incoming tokens).
+5. **The receipt flow now runs on a server-side draft `ShoppingReceipt`.** `processNewShoppingReceipt` returns a `shoppingReceiptId` (first field of its response) that `reprocess`/`confirm` must send back as a required field, and every product submitted to `reprocess`/`confirm` must carry a `manuallyEditedExpirationDate` boolean — see the [Shopping Receipt API Contract](#shopping-receipt-api-contract).
 
 ---
 
@@ -120,7 +122,7 @@ Decoding `jwtString` (e.g. for client-side identity checks) now yields:
 | Claim | Type | Notes |
 |-------|------|-------|
 | `sub` | string | account email |
-| `roles` | string[] | e.g. `["USER"]`, without the `ROLE_` prefix |
+| `roles` | string[] | e.g. `["ROLE_USER"]`, **with** the `ROLE_` prefix — the token generator prefixes every role with `ROLE_` (`JwtTokenGeneratorAdapter`); the backend strips it again when parsing incoming tokens, but clients decoding the claim see the prefixed values |
 | `accountId` | string (UUID) | the authenticating `Account`'s id |
 | `userId` | string (UUID) or `null` | present only if the account has the `USER` role; resolved from the `user` module at login time |
 | `adminId` | string (UUID) or `null` | present only if the account has the `ADMIN` role — see limitation below |
@@ -169,7 +171,8 @@ Validation errors additionally include an `errors` property: `{ "field": "messag
 | `ForbiddenException` (incl. `DisabledAccountException`) | `DomainException` | 403 |
 | `ConflictException` (incl. `AccountAlreadyExistsException`) | `DomainException` | 409 |
 | `DomainException` (any other) | `FreshKeepException` | 400 |
-| `InfrastructureException` (incl. `IdentityMappingException`, `UserProvisioningPendingException`, `AdminProvisioningPendingException`, `InvalidResolvedEntitiesException`) | `FreshKeepException` | 500 |
+| `InfrastructureException` (incl. `IdentityMappingException`, `UserProvisioningPendingException`, `AdminProvisioningPendingException`, `InvalidResolvedEntitiesException`, `ExpirationDateCalculationException`) | `FreshKeepException` | 500 |
+| `ApplicationException` (incl. `MoveProductDataUnavailableException`) | `RuntimeException` (handled explicitly, title "Application Server Error") | 500 |
 | `MethodArgumentNotValidException` / `ConstraintViolationException` | — | 400 |
 | `HttpMessageNotReadableException` | — | 400 |
 | `MethodArgumentTypeMismatchException` | — | 400 |
@@ -225,7 +228,8 @@ Any other route not matched above (i.e. anything outside `/api/v1/auth/**`) requ
 # Space API Contract
 
 Source: `SpaceController` (`modules/space/infrastructure/web`), `CreateSpaceService`, `GetSpaceOverviewService`,
-`GetStorageSpotsService`, `Space`/`StorageSpot`/`Emoji` domain models, `JpaSpaceRepositoryAdapter`,
+`GetStorageSpotsService`, `CreateSpaceInvitationService`, `JoinSpaceByInvitationService`,
+`Space`/`StorageSpot`/`Emoji`/`SpaceInvitation` domain models, `JpaSpaceRepositoryAdapter`,
 `SpaceProductsLookUpPort`/`ProductQueryAdapter` (product-listing lookup, `modules/product`).
 
 Base path: `api/v1/spaces`
@@ -396,10 +400,76 @@ not an error.
 
 ---
 
+## 4. Create invitation
+
+`POST /api/v1/spaces/{spaceId}/invitations`
+
+No request body. Generates an invitation token for the space. Tokens are valid for **24 hours** from creation and
+have **no usage-count limit** during that window — any number of different users can join with the same token before
+it expires (there is currently no per-invitation use cap and no deactivation on use; only expiry turns it inactive).
+
+`creatorId` is resolved server-side from the authenticated principal's `userId` claim, same as
+[Create Space](#1-create-space) — the caller must already be a participant of `spaceId`.
+
+### Success response — `201 Created`
+
+`Location` header: `/api/v1/spaces/{spaceId}/invitations/{id}`
+
+```json
+{
+  "id": "a7c1e5f3-....",
+  "token": "the-invitation-token",
+  "spaceId": "b3f1c9a0-....",
+  "userCreatorId": "d5b3e9c2-....",
+  "expiresAt": "2026-09-29T21:00:00",
+  "isActive": true
+}
+```
+
+`expiresAt` is a server-local `LocalDateTime` serialized without an offset — it is computed from the server's UTC
+clock (creation time + 24h). `isActive` is `true` on creation and stays `true` as the token is used.
+
+### Error responses
+
+| Status | Condition | Body (`ProblemDetail`) title |
+|--------|-----------|-------------------------------|
+| 400 Bad Request | `spaceId` path variable is not a valid UUID | "Validation Error in Parameter" |
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+| 409 Conflict | Authenticated user is not a participant of `spaceId` (`SpaceNotAccessibleException`) | "Conflict Error" |
+
+---
+
+## 5. Join space by invitation
+
+`POST /api/v1/spaces/invitations/{token}/join`
+
+No request body. Adds the authenticated user as a participant of the invitation's space. The token's use counter is
+incremented and the participant is added atomically.
+
+### Success response — `200 OK`
+
+```json
+{ "spaceId": "b3f1c9a0-...." }
+```
+
+### Error responses
+
+| Status | Condition | Body (`ProblemDetail`) title |
+|--------|-----------|-------------------------------|
+| 400 Bad Request | `token` does not reference an existing invitation (`NonExistentSpaceInvitationException`) | "Business Rule Error" |
+| 400 Bad Request | Invitation has expired, is no longer active, or has reached its usage limit (`ExpiredSpaceInvitationException` — expiry is the only reachable cause today, since created invitations have no use cap) | "Business Rule Error" |
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+| 409 Conflict | Authenticated user is already a participant of the space (`SpaceNotAccessibleException`) | "Conflict Error" |
+
+---
+
 ## Security & access control {#security--access-control-1}
 
-Enforced via `@PreAuthorize("hasRole('USER')")` on `SpaceController.create`, `SpaceController.getByParticipantId`, and
-`SpaceController.getOverView` — there is no URL-level rule for `/api/v1/spaces/**` in `AppSecurityConfiguration`, so it
+Enforced via `@PreAuthorize("hasRole('USER')")` on `SpaceController.create`, `SpaceController.getByParticipantId`,
+`SpaceController.getOverView`, `SpaceController.createInvitation`, and `SpaceController.useInvitation` — there is no
+URL-level rule for `/api/v1/spaces/**` in `AppSecurityConfiguration`, so it
 falls under the default `anyRequest().authenticated()` at the filter-chain level, with the role check happening at the
 method-security layer.
 
@@ -408,6 +478,8 @@ method-security layer.
 | `POST /api/v1/spaces` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
 | `GET /api/v1/spaces` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
 | `GET /api/v1/spaces/{spaceId}/overview` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
+| `POST /api/v1/spaces/{spaceId}/invitations` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
+| `POST /api/v1/spaces/invitations/{token}/join` | `authenticated()` | `@PreAuthorize("hasRole('USER')")` | Requires a valid `Bearer` JWT for an account with role `USER` |
 
 Failure handling matches the rest of the API (see [Failure handling for authorization](#failure-handling-for-authorization)):
 no/invalid token → 401 via `CustomAuthenticationEntryPoint`; valid token without the `USER` role → 403 via
@@ -428,9 +500,11 @@ Requires authentication — every endpoint below needs a valid `Bearer` JWT for 
 valid UUID; the authenticated user must be a **participant** of that space (see
 [shared error responses](#shared-error-responses)).
 
-All three endpoints are steps of one flow: `processNewShoppingReceipt` runs the AI extraction on an uploaded image;
-the client then either `confirm`s the extracted data as-is, or `reprocess`es it after the user flags specific
-products as wrong. `reprocess` and `confirm` both consume/produce `application/json`; `processNewShoppingReceipt`
+All three endpoints are steps of one flow: `processNewShoppingReceipt` runs the AI extraction on an uploaded image
+and persists a **draft** `ShoppingReceipt` (returning its `shoppingReceiptId`); the client then either `confirm`s
+the extracted data as-is, or `reprocess`es it after the user flags specific products as wrong — both must reference
+the draft via `shoppingReceiptId`, and it's at that step that the receipt is finalized and its `Product`s are
+actually persisted. `reprocess` and `confirm` both consume/produce `application/json`; `processNewShoppingReceipt`
 consumes `multipart/form-data`.
 
 ---
@@ -448,9 +522,10 @@ Consumes `multipart/form-data`.
 | `file`     | file part     | required (`@NotNull`) — the receipt image |
 | `language` | string        | required (`@NotBlank`) — see [Language field](#language-field) below |
 
-This step only uploads and AI-extracts the receipt; it does **not** persist a `ShoppingReceipt` or any `Product`s
-yet. The uploaded image itself is persisted as a `ReceiptImage` (so its id can be referenced by `reprocess`/`confirm`
-without re-uploading), but the extracted data is returned to the client for review, not saved.
+This step uploads and AI-extracts the receipt, persisting two things: the uploaded image as a `ReceiptImage`, and a
+**draft** `ShoppingReceipt` carrying the extracted `purchaseShoppingDate`/`storeName`. No `Product`s are persisted
+yet — the extracted data is returned to the client for review, and the draft's `shoppingReceiptId` (first field of
+the response) is what `reprocess`/`confirm` must send back to finalize the receipt.
 
 ### Success response — `201 Created`
 
@@ -458,6 +533,7 @@ without re-uploading), but the extracted data is returned to the client for revi
 
 ```json
 {
+  "shoppingReceiptId": "a8d2f0e1-....",
   "receiptImageId": "b3f1c9a0-....",
   "suggestedStorageSpots": [
     { "storageSpotId": "c4a2d8b1-....", "storageSpotName": "Fridge", "storageSpotType": "FRIDGE" }
@@ -527,45 +603,48 @@ Notes on this shape:
 
 Use this when the user reviewed the `processNewShoppingReceipt` response and flagged one or more products as wrong
 — it re-runs AI extraction (seeded with the full product list **and** the specific ones flagged) against the
-already-uploaded receipt image, then **persists** the resulting `ShoppingReceipt` and its `Product`s. This is the
-"AI, try again on these" path; use [Confirm](#3-confirm-and-persist) instead when nothing needs re-extraction.
+already-uploaded receipt image, then finalizes the draft `ShoppingReceipt` and persists it with its `Product`s. This
+is the "AI, try again on these" path; use [Confirm](#3-confirm-and-persist) instead when nothing needs re-extraction.
 
 ### Request body (`ReProcessShoppingReceiptRequest`)
 
 ```json
 {
+  "shoppingReceiptId": "a8d2f0e1-....",
   "receiptImageId": "b3f1c9a0-....",
   "shoppingDate": "2026-09-08",
   "storeName": "SuperMart",
   "language": "es",
   "flaggedProducts": [
-    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD" }
+    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD", "manuallyEditedExpirationDate": false }
   ],
   "allProducts": [
-    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD" }
+    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD", "manuallyEditedExpirationDate": false }
   ]
 }
 ```
 
-| Field             | Type                    | Constraints |
-|--------------------|-------------------------|-------------|
-| `receiptImageId`  | string (UUID)           | required, must reference a `ReceiptImage` already created via `processNewShoppingReceipt` |
-| `shoppingDate`    | string (`yyyy-MM-dd`)   | required, must not be in the future (`@PastOrPresent`, evaluated against the server's system clock) |
-| `storeName`       | string                  | required, non-blank |
-| `language`        | string                  | required (`@NotBlank`) — see [Language field](#language-field) below |
-| `flaggedProducts` | array of `ProductRequest` | required, non-empty — the products the user flagged for re-extraction |
-| `allProducts`     | array of `ProductRequest` | required, non-empty — the full current product list (flagged + unflagged), used as context for the AI |
+| Field                | Type                    | Constraints |
+|----------------------|-------------------------|-------------|
+| `shoppingReceiptId`  | string (UUID)           | required — must reference the **draft** `ShoppingReceipt` created by `processNewShoppingReceipt` for this same `receiptImageId`/`spaceId`/creator; the draft is finalized by this call |
+| `receiptImageId`     | string (UUID)           | required, must reference the `ReceiptImage` created via `processNewShoppingReceipt` (must belong to the same draft) |
+| `shoppingDate`       | string (`yyyy-MM-dd`)   | required, must not be in the future (`@PastOrPresent`, evaluated against the server's system clock) |
+| `storeName`          | string                  | required, non-blank |
+| `language`           | string                  | required (`@NotBlank`) — see [Language field](#language-field) below |
+| `flaggedProducts`    | array of `ProductRequest` | required, non-empty — the products the user flagged for re-extraction |
+| `allProducts`        | array of `ProductRequest` | required, non-empty — the full current product list (flagged + unflagged), used as context for the AI |
 
 `ProductRequest`:
 
-| Field                    | Type                | Constraints |
-|--------------------------|---------------------|-------------|
-| `expirationDate`         | string (`yyyy-MM-dd`) | required |
-| `productName`            | string              | required, max 30 chars |
-| `suggestedStorageSpotId` | string (UUID)       | required |
-| `productType`            | string              | required, max 30 chars |
-| `priceAmount`            | number              | optional, must be positive if present |
-| `currency`               | string              | optional, max 20 chars |
+| Field                          | Type                | Constraints |
+|--------------------------------|---------------------|-------------|
+| `expirationDate`               | string (`yyyy-MM-dd`) | required |
+| `productName`                  | string              | required, max 30 chars |
+| `suggestedStorageSpotId`        | string (UUID)       | required |
+| `productType`                  | string              | required, max 30 chars |
+| `priceAmount`                  | number              | optional, must be positive if present |
+| `currency`                     | string              | optional, max 20 chars |
+| `manuallyEditedExpirationDate` | boolean             | **required on every product** (`@NotNull`) — `true` when the user hand-edited that product's expiration date. Only consumed by `confirm` (it exempts such products from purchase-date-shift rectification, see [Confirm and persist](#3-confirm-and-persist)); `reprocess` currently ignores its value but still requires it present |
 
 Both `flaggedProducts` and `allProducts` bind via indexed form/query-style keys under the hood
 (`@ModelAttribute`), e.g. `allProducts[0].productName=Milk` — send them as a normal JSON array in the request body;
@@ -609,11 +688,13 @@ affects response order, not persistence order.
 
 | Status | Condition | Body title |
 |--------|-----------|------------|
-| 400 Bad Request | Any field fails bean validation (missing/blank/empty/future date/etc.) | "Validation Error In Body Data" |
+| 400 Bad Request | Any field fails bean validation (missing/blank/empty/future date/etc., incl. a missing `manuallyEditedExpirationDate` on any product) | "Validation Error In Body Data" |
 | 400 Bad Request | Malformed/missing JSON body | "Message Not Readable" |
-| 400 Bad Request | `spaceId`/`receiptImageId` not a valid UUID | "Validation Error in Parameter" / field error |
+| 400 Bad Request | `spaceId`/`receiptImageId`/`shoppingReceiptId` not a valid UUID | "Validation Error in Parameter" / field error |
 | 400 Bad Request | Space does not exist (`InvalidSpaceReferenceException`) | "Business Rule Error" |
 | 400 Bad Request | `receiptImageId` does not reference an existing `ReceiptImage` (`NonExistentReceiptImageException`) | "Business Rule Error" |
+| 400 Bad Request | `shoppingReceiptId` does not reference an existing `ShoppingReceipt` (`NonExistentShoppingReceiptException`) | "Business Rule Error" |
+| 400 Bad Request | `shoppingReceiptId`/`receiptImageId`/`spaceId`/creator don't all belong to the same draft (`InvalidShoppingReceiptException` — "cannot be reprocessed in the requested context") | "Business Rule Error" |
 | 400 Bad Request | Rectified `shoppingDate` still ends up after today, e.g. from clock skew (`InvalidShoppingReceiptException`) | "Business Rule Error" |
 | 400 Bad Request | AI extraction failed in a retryable way after retries exhausted (`AiRetryableException`) | "AI Server Error" |
 | 401/403 | Auth failures — see [shared error responses](#shared-error-responses) | — |
@@ -652,40 +733,46 @@ silently.
 `POST /api/v1/spaces/{spaceId}/shopping-receipt/confirm`
 
 Use this when the user reviewed the `processNewShoppingReceipt` response and everything looked correct — it skips
-AI re-extraction entirely and persists the client-submitted data as-is (after backfilling any invalid storage-spot
-suggestions, same as the other two endpoints).
+AI re-extraction entirely and persists the client-submitted data (after backfilling any invalid storage-spot
+suggestions, same as the other two endpoints — see the rectification note below).
 
 ### Request body (`ConfirmShoppingReceiptRequest`)
 
-Same shape as reprocess, **minus** `flaggedProducts`:
+Same shape as reprocess, **minus** `flaggedProducts` and `language`:
 
 ```json
 {
+  "shoppingReceiptId": "a8d2f0e1-....",
   "receiptImageId": "b3f1c9a0-....",
   "shoppingDate": "2026-09-08",
   "storeName": "SuperMart",
   "allProducts": [
-    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD" }
+    { "expirationDate": "2026-09-15", "productName": "Milk", "suggestedStorageSpotId": "c4a2d8b1-....", "productType": "DAIRY", "priceAmount": 2.50, "currency": "USD", "manuallyEditedExpirationDate": false }
   ]
 }
 ```
 
-| Field            | Type                       | Constraints |
-|-------------------|----------------------------|-------------|
-| `receiptImageId` | string (UUID)              | required, must reference a `ReceiptImage` already created via `processNewShoppingReceipt` |
-| `shoppingDate`   | string (`yyyy-MM-dd`)      | required, must not be in the future (`@PastOrPresent`) |
-| `storeName`      | string                     | required, non-blank |
-| `allProducts`    | array of `ProductRequest`  | required, non-empty — see `ProductRequest` shape under [Reprocess](#2-reprocess-with-flagged-products) |
+| Field                | Type                       | Constraints |
+|-----------------------|----------------------------|-------------|
+| `shoppingReceiptId`  | string (UUID)              | required — must reference the **draft** `ShoppingReceipt` created by `processNewShoppingReceipt` for this same `receiptImageId`/`spaceId`/creator; the draft is finalized by this call |
+| `receiptImageId`     | string (UUID)              | required, must reference a `ReceiptImage` already created via `processNewShoppingReceipt` (must belong to the same draft) |
+| `shoppingDate`       | string (`yyyy-MM-dd`)      | required, must not be in the future (`@PastOrPresent`) |
+| `storeName`          | string                     | required, non-blank |
+| `allProducts`        | array of `ProductRequest`  | required, non-empty — see `ProductRequest` shape under [Reprocess](#2-reprocess-with-flagged-products) (incl. the required `manuallyEditedExpirationDate`) |
 
 ### Success response — `201 Created`
 
 Same `ShoppingReceiptResponse` shape as [Reprocess](#2-reprocess-with-flagged-products), `Location` header:
 `/api/v1/spaces/{spaceId}/shopping-receipt/{shoppingReceiptId}`.
 
-Unlike reprocess, `shoppingDate`/`storeName`/product fields here are **not** run through AI re-extraction or date
-rectification before persisting — they're saved exactly as submitted (storage-spot fallback resolution still
-applies). If `shoppingDate` is in the future, `ShoppingReceipt.create()`'s own domain validation rejects it (see
-error table below) rather than silently clamping it, unlike step 1's preview response.
+Unlike reprocess, `shoppingDate`/`storeName`/product fields here are **not** run through AI re-extraction before
+persisting, and there is no future-date clamping — a `shoppingDate` in the future is rejected with a `400`
+(`@PastOrPresent` bean validation), unlike step 1's preview response which silently clamps. One rectification
+**does** still apply: if the submitted `shoppingDate` differs from the draft's extracted `purchaseShoppingDate`, the
+`expirationDate` of every product with `manuallyEditedExpirationDate: false` is shifted by the same number of days
+(preserving the extracted shelf-life relative to the new purchase date); products with
+`manuallyEditedExpirationDate: true` are saved exactly as submitted. Storage-spot fallback resolution applies to all
+products, as in the other endpoints.
 
 As with reprocess, `products` is returned sorted by `expirationDate` ascending (soonest-to-expire first), nulls
 last.
@@ -694,11 +781,13 @@ last.
 
 | Status | Condition | Body title |
 |--------|-----------|------------|
-| 400 Bad Request | Any field fails bean validation (missing/blank/empty/future date/etc.) | "Validation Error In Body Data" |
+| 400 Bad Request | Any field fails bean validation (missing/blank/empty/future date/etc., incl. a missing `manuallyEditedExpirationDate` on any product) | "Validation Error In Body Data" |
 | 400 Bad Request | Malformed/missing JSON body | "Message Not Readable" |
-| 400 Bad Request | `spaceId`/`receiptImageId` not a valid UUID | "Validation Error in Parameter" / field error |
+| 400 Bad Request | `spaceId`/`receiptImageId`/`shoppingReceiptId` not a valid UUID | "Validation Error in Parameter" / field error |
 | 400 Bad Request | Space does not exist (`InvalidSpaceReferenceException`) | "Business Rule Error" |
 | 400 Bad Request | `receiptImageId` does not reference an existing `ReceiptImage` (`NonExistentReceiptImageException`) | "Business Rule Error" |
+| 400 Bad Request | `shoppingReceiptId` does not reference an existing `ShoppingReceipt` (`NonExistentShoppingReceiptException`) | "Business Rule Error" |
+| 400 Bad Request | `shoppingReceiptId`/`receiptImageId`/`spaceId`/creator don't all belong to the same draft (`InvalidShoppingReceiptException` — "cannot be confirmed in the requested context") | "Business Rule Error" |
 | 400 Bad Request | `shoppingDate` is after the server's current date (`InvalidShoppingReceiptException`) | "Business Rule Error" |
 | 401/403 | Auth failures — see [shared error responses](#shared-error-responses) | — |
 | 409 Conflict | Authenticated user is not a participant of `spaceId` (`SpaceNotAccessibleException`) | "Conflict Error" |
@@ -719,3 +808,459 @@ Enforced the same way as the rest of the API — see [Security & access control]
 
 Error body shape (RFC 7807 `ProblemDetail`) is identical to the rest of the API — see
 [Error body shape](#error-body-shape).
+
+---
+
+# Product API Contract
+
+Source: `ProductController` (`modules/product/infrastructure/web`), `DeleteProductService`, `DeleteProductsService`,
+`MoveProductService`, `UpdateProductService`, `Product` domain model,
+`ProductMovedExpirationDateCalculatorPort`/`OllamaProductMovedExpirationDateCalculatorAdapter` (expiration-date
+recalculation on move).
+
+Base path: `api/v1/products`
+
+Requires authentication — every endpoint needs a valid `Bearer` JWT for an account with the `USER` role
+(`@PreAuthorize("hasRole('USER')")`), same as the [Space API](#space-api-contract). The authenticated user must be a
+**participant** of the space where the target product is stored (`SpaceNotAccessibleException` → 409 otherwise).
+
+All of these operate on products created through the receipt flow ([Confirm and persist](#3-confirm-and-persist) /
+[Reprocess](#2-reprocess-with-flagged-products)) — there is no direct product-creation endpoint.
+
+---
+
+## 1. Update a product
+
+`PATCH /api/v1/products/{id}`
+
+Partial update — every field is optional; omitted/`null` fields keep their current value (an empty body `{}` is a
+valid no-op that returns the product's current state).
+
+### Request body (`UpdateProductRequest`)
+
+| Field            | Type                  | Constraints |
+|------------------|-----------------------|-------------|
+| `name`           | string                | optional, max 30 chars, must contain a non-space character (`@Pattern`) |
+| `expirationDate` | string (`yyyy-MM-dd`) | optional |
+| `productType`    | string                | optional, max 30 chars — must be a valid `ProductType` constant name, checked at the domain layer: an invalid value is a 400 "Business Rule Error" (`InvalidProductTypeException`), not a bean-validation `errors` entry |
+| `amount`         | number                | optional, positive if present (the product's price amount) |
+| `currency`       | string                | optional, max 20 chars — must be a valid currency constant name, checked at the domain layer (`InvalidCurrencyException` → 400 "Business Rule Error") |
+
+### Success response — `200 OK`
+
+```json
+{
+  "productId": "e6c4fa03-....",
+  "name": "Milk",
+  "expirationDate": "2026-09-15",
+  "productType": "DAIRY",
+  "amount": 2.50,
+  "currency": "USD"
+}
+```
+
+### Error responses
+
+| Status | Condition | Body title |
+|--------|-----------|------------|
+| 400 Bad Request | Field fails bean validation (too long / spaces-only / non-positive amount) | "Validation Error In Body Data" |
+| 400 Bad Request | `id` path variable is not a valid UUID | "Validation Error in Parameter" |
+| 400 Bad Request | Product does not exist (`NonExistentProductException`) | "Business Rule Error" |
+| 400 Bad Request | `productType`/`currency` not a recognized constant (`InvalidProductTypeException`/`InvalidCurrencyException`) | "Business Rule Error" |
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+| 409 Conflict | User is not a participant of the product's storage spot's space (`SpaceNotAccessibleException`) | "Conflict Error" |
+
+---
+
+## 2. Move a product
+
+`PATCH /api/v1/products/{id}/storage-spot`
+
+Moves the product to a new storage spot (both spots' spaces must be accessible to the user). As part of the move, the
+product's `expirationDate` is **recalculated by an AI (Ollama) call** seeded with the product's storage-spot history —
+the returned `newExpirationDate` may differ from the product's previous date. This call needs the backend's Ollama
+service to be reachable; AI-side failures surface as real errors (this endpoint has no silent fallback).
+
+### Request body (`MoveProductRequest`)
+
+| Field               | Type            | Constraints |
+|---------------------|-----------------|-------------|
+| `oldStorageSpotId`  | string (UUID)   | required — must match the product's **current** storage spot (`InvalidProductMoveException` → 400 otherwise, despite the exception's "same spot" wording) |
+| `newStorageSpotId`  | string (UUID)   | required — the destination spot |
+
+### Success response — `200 OK`
+
+```json
+{
+  "productId": "e6c4fa03-....",
+  "newStorageSpotId": "c4a2d8b1-....",
+  "newExpirationDate": "2026-09-18"
+}
+```
+
+### Error responses
+
+| Status | Condition | Body title |
+|--------|-----------|------------|
+| 400 Bad Request | `oldStorageSpotId`/`newStorageSpotId` missing, or `id` path variable not a valid UUID | "Validation Error In Body Data" / "Validation Error in Parameter" |
+| 400 Bad Request | Product does not exist (`NonExistentProductException`) | "Business Rule Error" |
+| 400 Bad Request | `oldStorageSpotId` doesn't match the product's current spot (`InvalidProductMoveException`) | "Business Rule Error" |
+| 400 Bad Request | AI recalculation failed in a retryable way after retries exhausted (`AiRetryableException`) | "AI Server Error" |
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+| 409 Conflict | User is not a participant of the old/new spot's space(s) (`SpaceNotAccessibleException`) | "Conflict Error" |
+| 500 Internal Server Error | Bad/missing data for the recalculation (`ExpirationDateCalculationException`) | "Server Error" |
+| 500 Internal Server Error | Supporting data (shopping date / storage-spot history / spot info) couldn't be resolved (`MoveProductDataUnavailableException`) | "Application Server Error" |
+
+---
+
+## 3. Delete a product
+
+`DELETE /api/v1/products/{id}`
+
+**Soft delete** — sets the product's `deletedAt` timestamp rather than removing the row. Returns `204 No Content`
+with no body.
+
+### Error responses
+
+| Status | Condition | Body title |
+|--------|-----------|------------|
+| 400 Bad Request | `id` path variable is not a valid UUID | "Validation Error in Parameter" |
+| 400 Bad Request | Product does not exist (`NonExistentProductException`) | "Business Rule Error" |
+| 401 Unauthorized | No `Authorization` header, or an invalid/malformed/expired bearer token | "Unauthorized" |
+| 403 Forbidden | Valid token, but the account does not have the `USER` role | "Forbidden" |
+| 409 Conflict | User is not a participant of the product's storage spot's space (`SpaceNotAccessibleException`) | "Conflict Error" |
+
+---
+
+## 4. Delete multiple products
+
+`DELETE /api/v1/products`
+
+Batch version of the single delete — same soft-delete semantics. All-or-nothing per product: a missing id or a
+product stored in a space the user can't access fails the whole request (nothing is deleted).
+
+### Request body (`DeleteProductsRequest`)
+
+```json
+{ "productsIds": ["e6c4fa03-....", "f7b5d2e4-...."] }
+```
+
+| Field          | Type             | Constraints |
+|----------------|------------------|-------------|
+| `productsIds`  | array of UUIDs   | required, non-empty |
+
+### Success response — `204 No Content` (no body)
+
+### Error responses
+
+Same as the single delete, plus:
+
+| Status | Condition | Body title |
+|--------|-----------|------------|
+| 400 Bad Request | `productsIds` missing/empty | "Validation Error In Body Data" |
+| 400 Bad Request | Any element is not a valid UUID | "Message Not Readable" |
+
+---
+
+## Security & access control {#security--access-control-2}
+
+Same pattern as the [Space API](#security--access-control-1): no URL-level rule for `/api/v1/products/**` in
+`AppSecurityConfiguration` — everything falls under the default `anyRequest().authenticated()`, with
+`@PreAuthorize("hasRole('USER')")` on every `ProductController` method.
+
+Failure handling matches the rest of the API: no/invalid token → 401 via `CustomAuthenticationEntryPoint`; valid
+token without the `USER` role → 403 via `CustomAccessDeniedHandler`.
+
+---
+
+# Admin API Contract
+
+Source: `AdminController` (`modules/admin/infrastructure/web`), `GetUsersUseCase`,
+`GetProductsUseCase`, `GetShoppingReceiptsUseCase`, and `AdminResponseMapper`.
+
+Base path: `api/v1/admin`
+
+All Admin endpoints require a valid JWT for an account with the `ADMIN` role. Requests without a valid admin token
+receive `401 Unauthorized` or `403 Forbidden` according to the shared security rules above.
+
+## User endpoints
+
+### Daily user registration metrics
+
+`GET /api/v1/admin/metrics/users/registrations`
+
+Required query parameters:
+
+| Parameter | Type | Constraints |
+|-----------|------|-------------|
+| `from` | date (`yyyy-MM-dd`) | required |
+| `to` | date (`yyyy-MM-dd`) | required; range must be 0–100 days |
+
+Response — `200 OK`:
+
+```json
+[
+  { "date": "2026-01-10", "count": 4 }
+]
+```
+
+### Registered users
+
+`GET /api/v1/admin/users`
+
+Required query parameters:
+
+| Parameter | Type | Constraints |
+|-----------|------|-------------|
+| `from` | date (`yyyy-MM-dd`) | required |
+| `to` | date (`yyyy-MM-dd`) | required; range must be 0–90 days |
+| `page` | integer | one-based; defaults to `1` |
+| `size` | integer | defaults to `30`, maximum `40` |
+
+Response — `200 OK`:
+
+```json
+{
+  "content": [
+    {
+      "id": "b3f1c9a0-....",
+      "email": "user@example.com",
+      "username": "fresh-user",
+      "registeredAt": "2026-01-10T10:00:00Z",
+      "lastLoggedAt": null
+    }
+  ],
+  "page": 1,
+  "size": 30,
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+
+### User details
+
+`GET /api/v1/admin/users/{id}`
+
+Response — `200 OK`:
+
+```json
+{
+  "id": "b3f1c9a0-....",
+  "email": "user@example.com",
+  "username": "fresh-user",
+  "registeredAt": "2026-01-10T10:00:00Z",
+  "lastLoggedAt": null,
+  "roles": ["USER"],
+  "spaces": [
+    { "id": "c4a2d8b1-....", "name": "Kitchen" }
+  ],
+  "receipts": [
+    {
+      "id": "d5b3e9c2-....",
+      "createdAt": "2026-01-10T10:00:00Z",
+      "purchaseDate": "2026-01-10",
+      "storeName": "SuperMart"
+    }
+  ]
+}
+```
+
+## Product endpoints
+
+### Daily product metrics
+
+`GET /api/v1/admin/metrics/products`
+
+Required query parameters:
+
+| Parameter | Type | Constraints |
+|-----------|------|-------------|
+| `from` | date (`yyyy-MM-dd`) | required |
+| `to` | date (`yyyy-MM-dd`) | required; range must be 0–100 days |
+
+Optional query parameters:
+
+| Parameter | Type |
+|-----------|------|
+| `spaceId` | UUID |
+| `creatorId` | UUID |
+
+Response — `200 OK`:
+
+```json
+[
+  { "date": "2026-03-10", "count": 5 }
+]
+```
+
+### Products
+
+`GET /api/v1/admin/products`
+
+Optional query parameters:
+
+| Parameter | Type | Default/constraints |
+|-----------|------|---------------------|
+| `sort` | enum | product sort default |
+| `page` | integer | defaults to `0` |
+| `size` | integer | defaults to `30`, maximum `40` |
+| `productType` | enum | valid `ProductType` value |
+| `creatorId` | UUID | optional |
+| `shoppingReceiptId` | UUID | optional |
+| `isDeleted` | boolean | accepted by the request model; currently not applied by the product query |
+
+Response — `200 OK`:
+
+```json
+[
+  {
+    "id": "e6c4fa03-....",
+    "name": "Milk",
+    "expirationDate": "2026-09-15",
+    "actualStorageSpotId": "c4a2d8b1-....",
+    "productType": "DAIRY",
+    "shoppingReceiptId": "d5b3e9c2-....",
+    "price": 2.50,
+    "currency": "USD"
+  }
+]
+```
+
+### Product details
+
+`GET /api/v1/admin/products/{id}`
+
+Response — `200 OK`:
+
+```json
+{
+  "id": "e6c4fa03-....",
+  "name": "Milk",
+  "productType": "DAIRY",
+  "expirationDate": "2026-09-15",
+  "actualStorageSpotId": "c4a2d8b1-....",
+  "storageSpotIdType": "FRIDGE",
+  "creatorId": "b3f1c9a0-....",
+  "creatorUsername": "fresh-user",
+  "creatorEmail": "user@example.com",
+  "spaceId": "c4a2d8b1-....",
+  "spaceName": "Kitchen",
+  "storeName": "SuperMart",
+  "purchaseDate": "2026-09-08",
+  "createdAt": "2026-09-08T10:00:00Z",
+  "shoppingReceiptId": "d5b3e9c2-....",
+  "price": 2.50,
+  "currency": "USD"
+}
+```
+
+### Product types
+
+`GET /api/v1/admin/product-types`
+
+Response — `200 OK`:
+
+```json
+[
+  { "productType": "DAIRY", "productCount": 12 },
+  { "productType": "FRUITS", "productCount": 8 }
+]
+```
+
+## Shopping receipt endpoints
+
+### Daily shopping receipt metrics
+
+`GET /api/v1/admin/metrics/shopping-receipts`
+
+Required query parameters:
+
+| Parameter | Type | Constraints |
+|-----------|------|-------------|
+| `from` | date (`yyyy-MM-dd`) | required |
+| `to` | date (`yyyy-MM-dd`) | required; range must be 0–100 days |
+
+Optional query parameters: `spaceId` and `creatorId` (UUID).
+
+Response — `200 OK`:
+
+```json
+[
+  { "date": "2026-04-10", "totalReceipts": 3 }
+]
+```
+
+### Shopping receipts
+
+`GET /api/v1/admin/shopping-receipts`
+
+Required query parameters:
+
+| Parameter | Type | Constraints |
+|-----------|------|-------------|
+| `from` | date (`yyyy-MM-dd`) | required |
+| `to` | date (`yyyy-MM-dd`) | required; range must be 0–100 days |
+
+Optional query parameters: `spaceId` and `userId` (UUID).
+
+Response — `200 OK`:
+
+```json
+[
+  {
+    "id": "d5b3e9c2-....",
+    "creatorId": "b3f1c9a0-....",
+    "spaceId": "c4a2d8b1-....",
+    "storeName": "SuperMart",
+    "purchaseDate": "2026-09-08",
+    "createdAt": "2026-09-08T10:00:00Z"
+  }
+]
+```
+
+### Shopping receipt details
+
+`GET /api/v1/admin/shopping-receipts/{id}`
+
+Response — `200 OK`:
+
+```json
+{
+  "id": "d5b3e9c2-....",
+  "creatorId": "b3f1c9a0-....",
+  "creatorUsername": "fresh-user",
+  "creatorEmail": "user@example.com",
+  "spaceId": "c4a2d8b1-....",
+  "spaceName": "Kitchen",
+  "storeName": "SuperMart",
+  "purchaseDate": "2026-09-08",
+  "createdAt": "2026-09-08T10:00:00Z",
+  "receiptImageId": "f7a5d1e4-....",
+  "receiptImageAssetId": "shopping_receipts/receipts/abc123",
+  "receiptImageMimeType": "image/jpeg",
+  "products": [
+    {
+      "id": "e6c4fa03-....",
+      "name": "Milk",
+      "expirationDate": "2026-09-15",
+      "actualStorageSpotId": "c4a2d8b1-....",
+      "productType": "DAIRY",
+      "price": 2.50,
+      "currency": "USD"
+    }
+  ]
+}
+```
+
+### Admin error responses
+
+| Status | Condition |
+|--------|-----------|
+| 400 Bad Request | Invalid date, UUID, enum, pagination, or filter value |
+| 401 Unauthorized | Missing or invalid bearer token |
+| 403 Forbidden | Authenticated user does not have the `ADMIN` role |
+| 400 Bad Request | Requested user, product, or shopping receipt does not exist (mapped as a domain/business-rule error) |
+
+Errors use the shared RFC 7807 `ProblemDetail` format documented above.

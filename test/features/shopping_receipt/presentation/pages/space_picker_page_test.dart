@@ -24,9 +24,11 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 
 import '../../test_helpers/fake_image_picker_platform.dart';
 
-class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository {
+class _NeverCalledShoppingReceiptRepository
+    implements ShoppingReceiptRepository {
   @override
-  Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>> processNewReceipt({
+  Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>>
+  processNewReceipt({
     required String spaceId,
     required String imagePath,
     required String language,
@@ -36,6 +38,7 @@ class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -47,6 +50,7 @@ class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -186,42 +190,40 @@ void main() {
     expect(find.text('HOME_MARKER'), findsOneWidget);
   });
 
-  testWidgets(
-    'selecting a space stores the spaceId and, on a successful pick, '
-    'stores the image and navigates to the confirm-image screen',
-    (tester) async {
-      ImagePickerPlatform.instance = FakeImagePickerPlatform([
-        XFile(tempImageFile.path),
-      ]);
-      final spacesBloc = await _seededSpacesBloc([_space1]);
-      final shoppingReceiptBloc = _buildShoppingReceiptBloc();
+  testWidgets('selecting a space stores the spaceId and, on a successful pick, '
+      'stores the image and navigates to the confirm-image screen', (
+    tester,
+  ) async {
+    ImagePickerPlatform.instance = FakeImagePickerPlatform([
+      XFile(tempImageFile.path),
+    ]);
+    final spacesBloc = await _seededSpacesBloc([_space1]);
+    final shoppingReceiptBloc = _buildShoppingReceiptBloc();
 
-      await _pumpSpacePickerPage(tester, spacesBloc, shoppingReceiptBloc);
+    await _pumpSpacePickerPage(tester, spacesBloc, shoppingReceiptBloc);
 
-      await tester.tap(find.text('Kitchen'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Kitchen'));
+    await tester.pumpAndSettle();
 
-      expect(shoppingReceiptBloc.state.spaceId, 'space-1');
-      expect(shoppingReceiptBloc.state.imagePath, tempImageFile.path);
-      expect(find.text('CONFIRM_IMAGE_MARKER'), findsOneWidget);
-    },
-  );
+    expect(shoppingReceiptBloc.state.spaceId, 'space-1');
+    expect(shoppingReceiptBloc.state.imagePath, tempImageFile.path);
+    expect(find.text('CONFIRM_IMAGE_MARKER'), findsOneWidget);
+  });
 
-  testWidgets(
-    'cancelling the native picker leaves the user on this screen',
-    (tester) async {
-      ImagePickerPlatform.instance = FakeImagePickerPlatform([null]);
-      final spacesBloc = await _seededSpacesBloc([_space1]);
-      final shoppingReceiptBloc = _buildShoppingReceiptBloc();
+  testWidgets('cancelling the native picker leaves the user on this screen', (
+    tester,
+  ) async {
+    ImagePickerPlatform.instance = FakeImagePickerPlatform([null]);
+    final spacesBloc = await _seededSpacesBloc([_space1]);
+    final shoppingReceiptBloc = _buildShoppingReceiptBloc();
 
-      await _pumpSpacePickerPage(tester, spacesBloc, shoppingReceiptBloc);
+    await _pumpSpacePickerPage(tester, spacesBloc, shoppingReceiptBloc);
 
-      await tester.tap(find.text('Kitchen'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Kitchen'));
+    await tester.pumpAndSettle();
 
-      expect(shoppingReceiptBloc.state.imagePath, isNull);
-      expect(find.text('Kitchen'), findsOneWidget);
-      expect(find.text('CONFIRM_IMAGE_MARKER'), findsNothing);
-    },
-  );
+    expect(shoppingReceiptBloc.state.imagePath, isNull);
+    expect(find.text('Kitchen'), findsOneWidget);
+    expect(find.text('CONFIRM_IMAGE_MARKER'), findsNothing);
+  });
 }

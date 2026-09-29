@@ -4,6 +4,7 @@ import '../../../spaces/domain/entities/storage_spot.dart';
 import 'product_extraction.dart';
 
 class ReceiptExtractionResult extends Equatable {
+  final String shoppingReceiptId;
   final String receiptImageId;
   final List<StorageSpot> suggestedStorageSpots;
   final DateTime purchaseShoppingDate;
@@ -12,6 +13,7 @@ class ReceiptExtractionResult extends Equatable {
   final List<ProductExtraction> flaggedProducts;
 
   const ReceiptExtractionResult({
+    required this.shoppingReceiptId,
     required this.receiptImageId,
     required this.suggestedStorageSpots,
     required this.purchaseShoppingDate,
@@ -22,6 +24,7 @@ class ReceiptExtractionResult extends Equatable {
 
   @override
   List<Object?> get props => [
+    shoppingReceiptId,
     receiptImageId,
     suggestedStorageSpots,
     purchaseShoppingDate,

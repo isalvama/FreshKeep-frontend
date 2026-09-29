@@ -18,7 +18,9 @@ class ConfirmImagePage extends StatelessWidget {
     );
     if (pickedFile == null || !context.mounted) return;
 
-    context.read<ShoppingReceiptBloc>().add(ReceiptImagePicked(pickedFile.path));
+    context.read<ShoppingReceiptBloc>().add(
+      ReceiptImagePicked(pickedFile.path),
+    );
     context.push('/process-receipt/confirm-image');
   }
 
