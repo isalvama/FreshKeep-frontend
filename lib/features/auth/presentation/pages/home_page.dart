@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../spaces/domain/entities/space.dart';
 import '../../../spaces/presentation/bloc/spaces_bloc.dart';
 import '../../../spaces/presentation/widgets/creation_bottom_sheet.dart';
 import '../bloc/auth_bloc.dart';
@@ -55,9 +57,9 @@ class HomePage extends StatelessWidget {
                             ),
                             const SizedBox(height: 12),
                             ElevatedButton(
-                              onPressed: () => context
-                                  .read<SpacesBloc>()
-                                  .add(const SpacesRequested()),
+                              onPressed: () => context.read<SpacesBloc>().add(
+                                const SpacesRequested(),
+                              ),
                               child: const Text('Retry'),
                             ),
                           ],
@@ -71,7 +73,7 @@ class HomePage extends StatelessWidget {
                     return ListView.builder(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       itemCount: state.spaces.length,
-                      itemBuilder: (context, index) {
+                      itemBuilder: (_, index) {
                         final space = state.spaces[index];
                         return ListTile(
                           leading: Text(
@@ -79,6 +81,8 @@ class HomePage extends StatelessWidget {
                             style: const TextStyle(fontSize: 24),
                           ),
                           title: Text(space.spaceName),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _openOverview(context, space),
                         );
                       },
                     );
@@ -93,5 +97,13 @@ class HomePage extends StatelessWidget {
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  /// Spaces are shared, so another participant may have changed them while
+  /// the overview was open: refresh silently once the user comes back.
+  Future<void> _openOverview(BuildContext context, Space space) async {
+    await context.push('/space-overview/${space.id}', extra: space);
+    if (!context.mounted) return;
+    context.read<SpacesBloc>().add(const SpacesRefreshed());
   }
 }
