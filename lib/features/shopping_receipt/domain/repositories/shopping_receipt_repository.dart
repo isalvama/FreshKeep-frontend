@@ -7,14 +7,17 @@ import '../entities/product_extraction.dart';
 import '../entities/receipt_extraction_result.dart';
 
 abstract class ShoppingReceiptRepository {
-  Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>> processNewReceipt({
+  Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>>
+  processNewReceipt({
     required String spaceId,
     required String imagePath,
     required String language,
   });
 
-  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> confirmReceipt({
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -22,8 +25,10 @@ abstract class ShoppingReceiptRepository {
     required List<StorageSpot> spaceStorageSpots,
   });
 
-  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> reprocessReceipt({
+  Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
+  reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,

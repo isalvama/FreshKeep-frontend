@@ -33,6 +33,7 @@ class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -44,6 +45,7 @@ class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -71,6 +73,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -82,6 +85,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -93,6 +97,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
 }
 
 final _extraction = ReceiptExtractionResult(
+  shoppingReceiptId: 'shopping-receipt-1',
   receiptImageId: 'receipt-1',
   suggestedStorageSpots: const [],
   purchaseShoppingDate: DateTime(2026, 9, 8),

@@ -32,6 +32,7 @@ class ShoppingReceiptRemoteDataSource {
 
   Future<PersistedShoppingReceiptResponseModel> confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -41,6 +42,7 @@ class ShoppingReceiptRemoteDataSource {
     final response = await dio.post(
       '/api/v1/spaces/$spaceId/shopping-receipt/confirm',
       data: {
+        'shoppingReceiptId': shoppingReceiptId,
         'receiptImageId': receiptImageId,
         'shoppingDate': formatDateForRequest(shoppingDate),
         'storeName': storeName,
@@ -57,6 +59,7 @@ class ShoppingReceiptRemoteDataSource {
 
   Future<PersistedShoppingReceiptResponseModel> reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -68,6 +71,7 @@ class ShoppingReceiptRemoteDataSource {
     final response = await dio.post(
       '/api/v1/spaces/$spaceId/shopping-receipt/reprocess',
       data: {
+        'shoppingReceiptId': shoppingReceiptId,
         'receiptImageId': receiptImageId,
         'shoppingDate': formatDateForRequest(shoppingDate),
         'storeName': storeName,
@@ -98,7 +102,8 @@ String formatDateForRequest(DateTime date) {
 /// Builds the `ProductRequest` JSON shape shared by confirm and reprocess.
 /// `suggestedStorageSpotId` is required by the backend but nullable on
 /// [ProductExtraction] (the AI may find no fitting spot) — falls back to the
-/// space's first known storage spot when null.
+/// space's first known storage spot when null. `manuallyEditedExpirationDate`
+/// is required on every product by the backend, so it is always sent.
 Map<String, dynamic> productRequestJson(
   ProductExtraction product,
   List<StorageSpot> spaceStorageSpots,
@@ -111,5 +116,6 @@ Map<String, dynamic> productRequestJson(
     'productType': product.productType,
     if (product.priceAmount != null) 'priceAmount': product.priceAmount,
     if (product.currency != null) 'currency': product.currency,
+    'manuallyEditedExpirationDate': product.manuallyEditedExpirationDate,
   };
 }

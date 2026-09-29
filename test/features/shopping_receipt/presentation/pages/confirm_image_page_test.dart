@@ -21,9 +21,11 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 
 import '../../test_helpers/fake_image_picker_platform.dart';
 
-class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository {
+class _NeverCalledShoppingReceiptRepository
+    implements ShoppingReceiptRepository {
   @override
-  Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>> processNewReceipt({
+  Future<Either<ShoppingReceiptFailure, ReceiptExtractionResult>>
+  processNewReceipt({
     required String spaceId,
     required String imagePath,
     required String language,
@@ -33,6 +35,7 @@ class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -44,6 +47,7 @@ class _NeverCalledShoppingReceiptRepository implements ShoppingReceiptRepository
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -70,6 +74,7 @@ class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -81,6 +86,7 @@ class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,

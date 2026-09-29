@@ -59,6 +59,20 @@ class ShoppingReceiptState extends Equatable {
   final Set<int> selectedForReprocess;
   final int consecutiveFailureCount;
 
+  /// Indices into `extraction.productExtractions` of the AI-flagged products,
+  /// computed once on process success.
+  final Set<int> flaggedIndices;
+
+  /// Current (possibly edited) shopping date; seeded from the extraction.
+  final DateTime? shoppingDate;
+
+  /// Current (possibly edited) store name; seeded from the extraction.
+  final String? storeName;
+
+  /// productIndex → user-chosen expiration date. An entry exists only while
+  /// it differs from the product's originally extracted date.
+  final Map<int, DateTime> editedExpirationDates;
+
   const ShoppingReceiptState({
     required this.spaceId,
     required this.imagePath,
@@ -67,6 +81,10 @@ class ShoppingReceiptState extends Equatable {
     required this.reprocessedReceipt,
     required this.selectedForReprocess,
     required this.consecutiveFailureCount,
+    required this.flaggedIndices,
+    required this.shoppingDate,
+    required this.storeName,
+    required this.editedExpirationDates,
   });
 
   factory ShoppingReceiptState.initial() {
@@ -78,6 +96,31 @@ class ShoppingReceiptState extends Equatable {
       reprocessedReceipt: null,
       selectedForReprocess: {},
       consecutiveFailureCount: 0,
+      flaggedIndices: {},
+      shoppingDate: null,
+      storeName: null,
+      editedExpirationDates: {},
+    );
+  }
+
+  bool get hasPendingEdits {
+    final extraction = this.extraction;
+    if (extraction == null) return false;
+    return shoppingDate != extraction.purchaseShoppingDate ||
+        storeName != extraction.storeName ||
+        editedExpirationDates.isNotEmpty;
+  }
+
+  /// The expiration date shown for product [index]: the user-chosen date if
+  /// edited, otherwise the extracted date shifted by any shopping-date edit.
+  DateTime displayedExpirationDate(int index) {
+    final extraction = this.extraction!;
+    final edited = editedExpirationDates[index];
+    if (edited != null) return edited;
+    return shiftExpirationDate(
+      original: extraction.productExtractions[index].expirationDate,
+      fromShoppingDate: extraction.purchaseShoppingDate,
+      toShoppingDate: shoppingDate ?? extraction.purchaseShoppingDate,
     );
   }
 
@@ -89,6 +132,10 @@ class ShoppingReceiptState extends Equatable {
     PersistedShoppingReceipt? reprocessedReceipt,
     Set<int>? selectedForReprocess,
     int? consecutiveFailureCount,
+    Set<int>? flaggedIndices,
+    DateTime? shoppingDate,
+    String? storeName,
+    Map<int, DateTime>? editedExpirationDates,
   }) {
     return ShoppingReceiptState(
       spaceId: spaceId ?? this.spaceId,
@@ -99,6 +146,11 @@ class ShoppingReceiptState extends Equatable {
       selectedForReprocess: selectedForReprocess ?? this.selectedForReprocess,
       consecutiveFailureCount:
           consecutiveFailureCount ?? this.consecutiveFailureCount,
+      flaggedIndices: flaggedIndices ?? this.flaggedIndices,
+      shoppingDate: shoppingDate ?? this.shoppingDate,
+      storeName: storeName ?? this.storeName,
+      editedExpirationDates:
+          editedExpirationDates ?? this.editedExpirationDates,
     );
   }
 
@@ -111,5 +163,9 @@ class ShoppingReceiptState extends Equatable {
     reprocessedReceipt,
     selectedForReprocess,
     consecutiveFailureCount,
+    flaggedIndices,
+    shoppingDate,
+    storeName,
+    editedExpirationDates,
   ];
 }

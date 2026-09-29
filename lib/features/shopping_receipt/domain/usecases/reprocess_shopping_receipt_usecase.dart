@@ -13,6 +13,7 @@ class ReprocessShoppingReceiptUseCase {
 
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> call({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -22,6 +23,7 @@ class ReprocessShoppingReceiptUseCase {
     required List<StorageSpot> spaceStorageSpots,
   }) => repository.reprocessReceipt(
     spaceId: spaceId,
+    shoppingReceiptId: shoppingReceiptId,
     receiptImageId: receiptImageId,
     shoppingDate: shoppingDate,
     storeName: storeName,

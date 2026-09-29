@@ -33,9 +33,8 @@ class PersistedShoppingReceiptResponseModel {
           .toList(),
       storageSpots: (json['storageSpots'] as List<dynamic>)
           .map(
-            (spot) => StorageSpotResponseModel.fromJson(
-              spot as Map<String, dynamic>,
-            ),
+            (spot) =>
+                StorageSpotResponseModel.fromJson(spot as Map<String, dynamic>),
           )
           .toList(),
     );

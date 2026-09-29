@@ -13,6 +13,7 @@ class ConfirmShoppingReceiptUseCase {
 
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>> call({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -20,6 +21,7 @@ class ConfirmShoppingReceiptUseCase {
     required List<StorageSpot> spaceStorageSpots,
   }) => repository.confirmReceipt(
     spaceId: spaceId,
+    shoppingReceiptId: shoppingReceiptId,
     receiptImageId: receiptImageId,
     shoppingDate: shoppingDate,
     storeName: storeName,

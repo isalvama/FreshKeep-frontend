@@ -26,8 +26,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   });
 
   final Either<ShoppingReceiptFailure, ReceiptExtractionResult> result;
-  final Either<ShoppingReceiptFailure, PersistedShoppingReceipt>?
-  confirmResult;
+  final Either<ShoppingReceiptFailure, PersistedShoppingReceipt>? confirmResult;
   final Either<ShoppingReceiptFailure, PersistedShoppingReceipt>?
   reprocessResult;
 
@@ -48,6 +47,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   confirmReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -64,6 +64,7 @@ class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
   Future<Either<ShoppingReceiptFailure, PersistedShoppingReceipt>>
   reprocessReceipt({
     required String spaceId,
+    required String shoppingReceiptId,
     required String receiptImageId,
     required DateTime shoppingDate,
     required String storeName,
@@ -119,6 +120,7 @@ const _pantry = StorageSpot(
 );
 
 final _extraction = ReceiptExtractionResult(
+  shoppingReceiptId: 'shopping-receipt-1',
   receiptImageId: 'receipt-1',
   suggestedStorageSpots: const [_fridge, _pantry],
   purchaseShoppingDate: DateTime(2026, 9, 8),
@@ -217,29 +219,28 @@ void main() {
     expect(find.textContaining('Pantry'), findsOneWidget); // Bread
   });
 
-  testWidgets(
-    'flagged products render in a group above the rest',
-    (tester) async {
-      final bloc = await _buildSucceededBloc();
+  testWidgets('flagged products render in a group above the rest', (
+    tester,
+  ) async {
+    final bloc = await _buildSucceededBloc();
 
-      await _pumpResultsPage(tester, bloc);
+    await _pumpResultsPage(tester, bloc);
 
-      final flaggedGroup = _flaggedGroupFinder();
-      expect(flaggedGroup, findsOneWidget);
-      expect(
-        find.descendant(of: flaggedGroup, matching: find.text('Milk')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: flaggedGroup, matching: find.text('Eggs')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: flaggedGroup, matching: find.text('Bread')),
-        findsNothing,
-      );
-    },
-  );
+    final flaggedGroup = _flaggedGroupFinder();
+    expect(flaggedGroup, findsOneWidget);
+    expect(
+      find.descendant(of: flaggedGroup, matching: find.text('Milk')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: flaggedGroup, matching: find.text('Eggs')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: flaggedGroup, matching: find.text('Bread')),
+      findsNothing,
+    );
+  });
 
   testWidgets(
     'every product has an unchecked checkbox that toggles reprocess selection',
@@ -317,9 +318,7 @@ void main() {
         products: const [],
         storageSpots: const [],
       );
-      final bloc = await _buildSucceededBloc(
-        reprocessResult: Right(persisted),
-      );
+      final bloc = await _buildSucceededBloc(reprocessResult: Right(persisted));
 
       await _pumpResultsPage(tester, bloc);
 
@@ -345,9 +344,7 @@ void main() {
         products: const [],
         storageSpots: const [],
       );
-      final bloc = await _buildSucceededBloc(
-        reprocessResult: Right(persisted),
-      );
+      final bloc = await _buildSucceededBloc(reprocessResult: Right(persisted));
 
       await _pumpResultsPage(tester, bloc);
 
@@ -391,26 +388,23 @@ void main() {
     },
   );
 
-  testWidgets(
-    'a second consecutive failure navigates to the error screen',
-    (tester) async {
-      const failure = ShoppingReceiptServerFailure('Something went wrong.');
-      final bloc = await _buildSucceededBloc(
-        confirmResult: const Left(failure),
-      );
+  testWidgets('a second consecutive failure navigates to the error screen', (
+    tester,
+  ) async {
+    const failure = ShoppingReceiptServerFailure('Something went wrong.');
+    final bloc = await _buildSucceededBloc(confirmResult: const Left(failure));
 
-      await _pumpResultsPage(tester, bloc);
+    await _pumpResultsPage(tester, bloc);
 
-      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
-      await tester.pumpAndSettle();
-      expect(bloc.state.consecutiveFailureCount, 1);
+    await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+    await tester.pumpAndSettle();
+    expect(bloc.state.consecutiveFailureCount, 1);
 
-      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('ERROR_MARKER'), findsOneWidget);
-    },
-  );
+    expect(find.text('ERROR_MARKER'), findsOneWidget);
+  });
 
   testWidgets(
     'while confirming, both buttons are disabled and a progress indicator is shown',
@@ -433,4 +427,366 @@ void main() {
       expect(reprocessButton.onPressed, isNull);
     },
   );
+
+  group('shopping date and store name editing', () {
+    DateTime today() => DateUtils.dateOnly(DateTime.now());
+
+    String inputFormat(DateTime date) =>
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.day.toString().padLeft(2, '0')}/${date.year}';
+
+    String displayFormat(DateTime date) =>
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+
+    testWidgets('the shopping-date picker ranges from one year ago to today', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.byTooltip('Edit shopping date'));
+      await tester.pumpAndSettle();
+
+      final picker = tester.widget<DatePickerDialog>(
+        find.byType(DatePickerDialog),
+      );
+      final now = today();
+      expect(picker.firstDate, DateTime(now.year - 1, now.month, now.day));
+      expect(picker.lastDate, now);
+    });
+
+    testWidgets('picking a shopping date dispatches it and shows it', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+      final picked = today().subtract(const Duration(days: 2));
+      final pickedDate = DateTime(picked.year, picked.month, picked.day);
+
+      await tester.tap(find.byTooltip('Edit shopping date'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Switch to input'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), inputFormat(pickedDate));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(DatePickerDialog),
+          matching: find.text('OK'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(bloc.state.shoppingDate, pickedDate);
+      expect(find.text(displayFormat(pickedDate)), findsOneWidget);
+    });
+
+    testWidgets(
+      'a shopping date older than the picker range opens the picker without '
+      'an assertion error',
+      (tester) async {
+        final bloc = await _buildSucceededBloc();
+        bloc.add(ReceiptShoppingDateEdited(DateTime(2000, 1, 1)));
+        await _pumpResultsPage(tester, bloc);
+
+        await tester.tap(find.byTooltip('Edit shopping date'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final picker = tester.widget<DatePickerDialog>(
+          find.byType(DatePickerDialog),
+        );
+        expect(picker.initialDate, picker.firstDate);
+      },
+    );
+
+    testWidgets('the store-name dialog disables Save while blank or '
+        'whitespace-only', (tester) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.byTooltip('Edit store name'));
+      await tester.pumpAndSettle();
+
+      TextButton saveButton() =>
+          tester.widget<TextButton>(find.widgetWithText(TextButton, 'Save'));
+
+      expect(saveButton().onPressed, isNotNull);
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pump();
+      expect(saveButton().onPressed, isNull);
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pump();
+      expect(saveButton().onPressed, isNull);
+    });
+
+    testWidgets('saving the store name dispatches the trimmed value', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.byTooltip('Edit store name'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '  MegaMart  ');
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(bloc.state.storeName, 'MegaMart');
+      expect(find.text('MegaMart'), findsOneWidget);
+    });
+
+    testWidgets('cancelling the store-name dialog changes nothing', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.byTooltip('Edit store name'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'MegaMart');
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(bloc.state.storeName, 'SuperMart');
+      expect(bloc.state.hasPendingEdits, isFalse);
+      expect(find.text('SuperMart'), findsOneWidget);
+    });
+
+    testWidgets('both edit icons are disabled while confirming', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+      await tester.pump();
+
+      IconButton iconButton(String tooltip) => tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip(tooltip),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(iconButton('Edit store name').onPressed, isNull);
+      expect(iconButton('Edit shopping date').onPressed, isNull);
+    });
+  });
+
+  group('product expiration date editing', () {
+    DateTime today() => DateUtils.dateOnly(DateTime.now());
+
+    Finder tileOf(String productName) =>
+        find.widgetWithText(CheckboxListTile, productName);
+
+    Finder editIconOf(String productName) => find.descendant(
+      of: tileOf(productName),
+      matching: find.byTooltip('Edit expiration date'),
+    );
+
+    Future<void> pickViaInput(WidgetTester tester, DateTime date) async {
+      await tester.tap(find.byTooltip('Switch to input'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField),
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.day.toString().padLeft(2, '0')}/${date.year}',
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byType(DatePickerDialog),
+          matching: find.text('OK'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('every product row, flagged or not, has a calendar icon', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      expect(editIconOf('Milk'), findsOneWidget); // flagged
+      expect(editIconOf('Bread'), findsOneWidget); // not flagged
+      expect(editIconOf('Eggs'), findsOneWidget); // flagged
+    });
+
+    testWidgets(
+      'the icon opens a picker ranging from the shopping date to today + 10 years',
+      (tester) async {
+        final bloc = await _buildSucceededBloc();
+        await _pumpResultsPage(tester, bloc);
+
+        await tester.tap(editIconOf('Bread'));
+        await tester.pumpAndSettle();
+
+        final picker = tester.widget<DatePickerDialog>(
+          find.byType(DatePickerDialog),
+        );
+        final now = today();
+        expect(picker.firstDate, DateTime(2026, 9, 8));
+        expect(picker.lastDate, DateTime(now.year + 10, now.month, now.day));
+        expect(picker.initialDate, DateTime(2026, 9, 20));
+      },
+    );
+
+    testWidgets('tapping the row (not the icon) only toggles its checkbox', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      expect(bloc.state.selectedForReprocess, {1});
+      expect(find.byType(DatePickerDialog), findsNothing);
+      expect(bloc.state.editedExpirationDates, isEmpty);
+    });
+
+    testWidgets('picking a different date shows the "edited" marker on that '
+        'row only; picking the original date again removes it', (tester) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(editIconOf('Bread'));
+      await tester.pumpAndSettle();
+      await pickViaInput(tester, DateTime(2026, 9, 30));
+
+      expect(bloc.state.editedExpirationDates, {1: DateTime(2026, 9, 30)});
+      expect(find.textContaining('edited'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: tileOf('Bread'),
+          matching: find.textContaining('exp. 2026-09-30 · edited'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(editIconOf('Bread'));
+      await tester.pumpAndSettle();
+      await pickViaInput(tester, DateTime(2026, 9, 20));
+
+      expect(bloc.state.editedExpirationDates, isEmpty);
+      expect(find.textContaining('edited'), findsNothing);
+    });
+
+    testWidgets('after a shopping-date edit, unedited rows show the shifted '
+        'date and edited rows keep the chosen one', (tester) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      bloc.add(ProductExpirationDateEdited(1, DateTime(2026, 9, 30)));
+      bloc.add(ReceiptShoppingDateEdited(DateTime(2026, 9, 5)));
+      await tester.pumpAndSettle();
+
+      // Milk 09-15 and Eggs 09-25 shift by -3 days; Bread keeps 09-30.
+      expect(find.textContaining('exp. 2026-09-12'), findsOneWidget);
+      expect(find.textContaining('exp. 2026-09-22'), findsOneWidget);
+      expect(find.textContaining('exp. 2026-09-30'), findsOneWidget);
+    });
+
+    testWidgets(
+      'an expiration date earlier than the shopping date opens the picker '
+      'without an assertion error',
+      (tester) async {
+        final bloc = await _buildSucceededBloc();
+        bloc.add(ProductExpirationDateEdited(0, DateTime(2026, 9, 1)));
+        await _pumpResultsPage(tester, bloc);
+
+        await tester.tap(editIconOf('Milk'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        final picker = tester.widget<DatePickerDialog>(
+          find.byType(DatePickerDialog),
+        );
+        expect(picker.initialDate, picker.firstDate);
+      },
+    );
+
+    testWidgets('the calendar icons are disabled while confirming', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+      await tester.pump();
+
+      for (final name in ['Milk', 'Bread', 'Eggs']) {
+        final button = tester.widget<IconButton>(
+          find.ancestor(
+            of: editIconOf(name),
+            matching: find.byType(IconButton),
+          ),
+        );
+        expect(button.onPressed, isNull, reason: name);
+      }
+    });
+  });
+
+  group('reprocess with pending edits', () {
+    Finder reprocessButton() =>
+        find.widgetWithText(ElevatedButton, 'Reprocess selected products');
+
+    testWidgets('with pending edits, the discard dialog appears before any '
+        'request; Cancel keeps the edits and sends nothing', (tester) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+      bloc.add(const ReceiptStoreNameEdited('MegaMart'));
+      bloc.add(const ReprocessSelectionToggled(1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(reprocessButton());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard your edits?'), findsOneWidget);
+      expect(bloc.state.status, isA<ShoppingReceiptProcessSuccess>());
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard your edits?'), findsNothing);
+      expect(bloc.state.status, isA<ShoppingReceiptProcessSuccess>());
+      expect(bloc.state.storeName, 'MegaMart');
+      expect(bloc.state.hasPendingEdits, isTrue);
+    });
+
+    testWidgets('Continue discards the edits and sends the reprocess request', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+      bloc.add(const ReceiptStoreNameEdited('MegaMart'));
+      bloc.add(ProductExpirationDateEdited(1, DateTime(2026, 9, 30)));
+      bloc.add(const ReprocessSelectionToggled(1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(reprocessButton());
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Continue'));
+      await tester.pump();
+
+      expect(bloc.state.status, isA<ShoppingReceiptReprocessing>());
+      expect(bloc.state.hasPendingEdits, isFalse);
+      expect(find.text('SuperMart'), findsOneWidget);
+      expect(find.textContaining('edited'), findsNothing);
+    });
+
+    testWidgets('with no pending edits, the request is sent directly with no '
+        'dialog', (tester) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+      bloc.add(const ReprocessSelectionToggled(1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(reprocessButton());
+      await tester.pump();
+
+      expect(find.text('Discard your edits?'), findsNothing);
+      expect(bloc.state.status, isA<ShoppingReceiptReprocessing>());
+    });
+  });
 }
