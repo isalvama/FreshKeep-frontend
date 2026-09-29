@@ -21,26 +21,32 @@ Future<StorageSpotType?> showStorageSpotTypeSheet(
 }) {
   return showModalBottomSheet<StorageSpotType>(
     context: context,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(kCornerRadius)),
     ),
     builder: (context) {
       return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Storage Spot Type', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            for (final type in StorageSpotType.values)
-              ListTile(
-                title: Text(storageSpotTypeLabel(type)),
-                trailing: type == selected ? const Icon(Icons.check) : null,
-                onTap: () => Navigator.of(context).pop(type),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                child: Text(
+                  'Storage Spot Type',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
-            const SizedBox(height: 8),
-          ],
+              for (final type in StorageSpotType.values)
+                ListTile(
+                  title: Text(storageSpotTypeLabel(type)),
+                  trailing: type == selected ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.of(context).pop(type),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       );
     },
