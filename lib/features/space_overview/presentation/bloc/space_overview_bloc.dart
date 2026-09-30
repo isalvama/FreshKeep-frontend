@@ -1,8 +1,10 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../products/domain/entities/updated_product.dart';
 import '../../../products/domain/usecases/delete_product_usecase.dart';
 import '../../../products/domain/usecases/delete_products_usecase.dart';
+import '../../../shopping_receipt/domain/entities/persisted_product.dart';
 import '../../domain/entities/space_overview.dart';
 import '../../domain/usecases/get_space_overview_usecase.dart';
 
@@ -23,6 +25,7 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     on<ProductSelectionToggled>(_onSelectionToggled);
     on<ProductSelectionCleared>(_onSelectionCleared);
     on<SelectedProductsDeleteSubmitted>(_onDeleteSubmitted);
+    on<ProductUpdated>(_onProductUpdated);
   }
 
   bool get _isDeleting => state.deletionStatus is ProductDeletionInProgress;
@@ -107,6 +110,58 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
         );
       },
     );
+  }
+
+  /// The PATCH response has no `storageSpotId`, so the one already in the
+  /// list is kept. The list stays sorted soonest-to-expire first, like the
+  /// backend returns it.
+  void _onProductUpdated(
+    ProductUpdated event,
+    Emitter<SpaceOverviewState> emit,
+  ) {
+    final status = state.status;
+    if (status is! SpaceOverviewLoadSuccess) return;
+
+    final products = status.overview.productResults;
+    final updated = event.product;
+    final index = products.indexWhere((p) => p.id == updated.productId);
+    if (index == -1) return;
+
+    final merged = [...products];
+    merged[index] = PersistedProduct(
+      id: updated.productId,
+      productName: updated.name,
+      expirationDate: updated.expirationDate,
+      storageSpotId: products[index].storageSpotId,
+      productType: updated.productType,
+      priceAmount: updated.amount,
+      currency: updated.currency,
+    );
+
+    final overview = status.overview;
+    emit(
+      state.copyWith(
+        status: SpaceOverviewLoadSuccess(
+          SpaceOverview(
+            id: overview.id,
+            name: overview.name,
+            emoji: overview.emoji,
+            storageSpots: overview.storageSpots,
+            productResults: _sortedByExpiration(merged),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Stable: products with the same date keep their current order.
+  List<PersistedProduct> _sortedByExpiration(List<PersistedProduct> products) {
+    final indexed = products.indexed.toList()
+      ..sort((a, b) {
+        final byDate = a.$2.expirationDate.compareTo(b.$2.expirationDate);
+        return byDate != 0 ? byDate : a.$1.compareTo(b.$1);
+      });
+    return [for (final (_, product) in indexed) product];
   }
 
   SpaceOverview _withoutProducts(SpaceOverview overview, List<String> ids) {
