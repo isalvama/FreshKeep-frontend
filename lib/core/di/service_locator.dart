@@ -6,6 +6,7 @@ import '../../features/products/data/repositories/product_repository_impl.dart';
 import '../../features/products/domain/repositories/product_repository.dart';
 import '../../features/products/domain/usecases/delete_product_usecase.dart';
 import '../../features/products/domain/usecases/delete_products_usecase.dart';
+import '../../features/products/domain/usecases/move_product_usecase.dart';
 import '../../features/products/domain/usecases/update_product_usecase.dart';
 import '../../features/products/presentation/bloc/edit_product_bloc.dart';
 import '../../features/shopping_receipt/data/datasources/shopping_receipt_remote_datasource.dart';
@@ -88,6 +89,7 @@ void setupServiceLocator({required Dio dio}) {
   getIt.registerFactory(() => DeleteProductUseCase(getIt()));
   getIt.registerFactory(() => DeleteProductsUseCase(getIt()));
   getIt.registerFactory(() => UpdateProductUseCase(getIt()));
+  getIt.registerFactory(() => MoveProductUseCase(getIt()));
   getIt.registerFactoryParam<EditProductBloc, PersistedProduct, void>(
     (product, _) =>
         EditProductBloc(updateProductUseCase: getIt(), product: product),

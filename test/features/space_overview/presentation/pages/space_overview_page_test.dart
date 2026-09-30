@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/moved_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/update_product_usecase.dart';
 import 'package:fresh_keep_frontend/features/products/presentation/bloc/edit_product_bloc.dart';
@@ -66,6 +67,13 @@ class _UnusedProductRepository implements ProductRepository {
     required String productId,
     required ProductChanges changes,
   }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) => throw UnimplementedError();
 }
 
 /// Records every delete call. Each call resolves with [result], or waits on
@@ -102,6 +110,13 @@ class _RecordingProductRepository implements ProductRepository {
     required String productId,
     required ProductChanges changes,
   }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) => throw UnimplementedError();
 }
 
 /// Answers every update with [result] and records the calls.
@@ -128,6 +143,13 @@ class _UpdatingProductRepository implements ProductRepository {
   @override
   Future<Either<ProductFailure, Unit>> deleteProducts({
     required List<String> productIds,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
   }) => throw UnimplementedError();
 }
 

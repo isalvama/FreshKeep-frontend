@@ -140,6 +140,10 @@ class ProductConflictFailure extends ProductFailure {
   const ProductConflictFailure(super.message); // 409 — not a participant
 }
 
+class ProductServerFailure extends ProductFailure {
+  const ProductServerFailure(super.message); // 500
+}
+
 class ProductNetworkFailure extends ProductFailure {
   const ProductNetworkFailure(super.message); // no connectivity / timeout
 }

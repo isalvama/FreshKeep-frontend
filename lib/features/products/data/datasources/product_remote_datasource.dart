@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../../shopping_receipt/data/datasources/shopping_receipt_remote_datasource.dart';
 import '../../domain/entities/product_changes.dart';
+import '../models/moved_product_response_model.dart';
 import '../models/updated_product_response_model.dart';
 
 class ProductRemoteDataSource {
@@ -39,6 +40,26 @@ class ProductRemoteDataSource {
     );
 
     return UpdatedProductResponseModel.fromJson(
+      response.data as Map<String, dynamic>,
+    );
+  }
+
+  /// [oldStorageSpotId] must be the product's current spot; the backend
+  /// recalculates the expiration date as part of the move.
+  Future<MovedProductResponseModel> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) async {
+    final response = await dio.patch(
+      '/api/v1/products/$productId/storage-spot',
+      data: {
+        'oldStorageSpotId': oldStorageSpotId,
+        'newStorageSpotId': newStorageSpotId,
+      },
+    );
+
+    return MovedProductResponseModel.fromJson(
       response.data as Map<String, dynamic>,
     );
   }

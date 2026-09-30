@@ -8,6 +8,7 @@ import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/products/data/datasources/product_remote_datasource.dart';
 import 'package:fresh_keep_frontend/features/products/data/repositories/product_repository_impl.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/currency.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/moved_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/product_type.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
@@ -309,6 +310,10 @@ void main() {
         isA<ProductConflictFailure>(),
         'You are not a participant of this space.',
       ),
+      500: (
+        isA<ProductServerFailure>(),
+        'Something went wrong on the server. Try again later.',
+      ),
     };
 
     Future<ProductFailure?> update(ProductRepositoryImpl repository) async =>
@@ -349,6 +354,142 @@ void main() {
 
     test('connection error maps to ProductNetworkFailure', () async {
       final failure = await update(_buildRepository(_ConnectionErrorAdapter()));
+
+      expect(failure, isA<ProductNetworkFailure>());
+    });
+  });
+
+  group('ProductRepositoryImpl.moveProduct', () {
+    const movedJson = {
+      'productId': 'product-1',
+      'newStorageSpotId': 'spot-2',
+      'newExpirationDate': '2026-09-18',
+    };
+
+    Future<Either<ProductFailure, MovedProduct>> move(
+      ProductRepositoryImpl repository,
+    ) => repository.moveProduct(
+      productId: 'product-1',
+      oldStorageSpotId: 'spot-1',
+      newStorageSpotId: 'spot-2',
+    );
+
+    test('sends PATCH /api/v1/products/<id>/storage-spot with both spot ids '
+        'and maps 200 to Right(MovedProduct)', () async {
+      final adapter = _RecordingAdapter(statusCode: 200, body: movedJson);
+
+      final result = await move(_buildRepository(adapter));
+
+      expect(
+        result,
+        Right<ProductFailure, MovedProduct>(
+          MovedProduct(
+            productId: 'product-1',
+            newStorageSpotId: 'spot-2',
+            newExpirationDate: DateTime(2026, 9, 18),
+          ),
+        ),
+      );
+      final request = adapter.requests.single;
+      expect(request.method, 'PATCH');
+      expect(request.path, '/api/v1/products/product-1/storage-spot');
+      expect(request.data, {
+        'oldStorageSpotId': 'spot-1',
+        'newStorageSpotId': 'spot-2',
+      });
+    });
+
+    test('parses newExpirationDate as a local calendar day', () async {
+      final moved = (await move(
+        _buildRepository(_RecordingAdapter(statusCode: 200, body: movedJson)),
+      )).getRight().toNullable();
+
+      expect(moved!.newExpirationDate.isUtc, isFalse);
+      expect(
+        (
+          moved.newExpirationDate.year,
+          moved.newExpirationDate.month,
+          moved.newExpirationDate.day,
+        ),
+        (2026, 9, 18),
+      );
+    });
+
+    final cases = <int, (TypeMatcher<ProductFailure>, String)>{
+      400: (
+        isA<ProductValidationFailure>(),
+        "This product couldn't be moved. Try again.",
+      ),
+      401: (
+        isA<ProductUnauthorizedFailure>(),
+        'Your session has expired. Please log in again.',
+      ),
+      403: (
+        isA<ProductForbiddenFailure>(),
+        'You are not allowed to perform this action.',
+      ),
+      409: (
+        isA<ProductConflictFailure>(),
+        'You are not a participant of this space.',
+      ),
+      500: (
+        isA<ProductServerFailure>(),
+        'Something went wrong on the server. Try again later.',
+      ),
+    };
+
+    for (final entry in cases.entries) {
+      final status = entry.key;
+      final (matcher, defaultMessage) = entry.value;
+
+      test('$status uses the backend detail', () async {
+        final failure = (await move(
+          _buildRepository(
+            _RecordingAdapter(
+              statusCode: status,
+              body: {'detail': 'backend says $status'},
+            ),
+          ),
+        )).getLeft().toNullable();
+
+        expect(failure, matcher);
+        expect(failure!.message, 'backend says $status');
+      });
+
+      test('$status without detail uses the default message', () async {
+        final failure = (await move(
+          _buildRepository(
+            _RecordingAdapter(statusCode: status, body: <String, dynamic>{}),
+          ),
+        )).getLeft().toNullable();
+
+        expect(failure, matcher);
+        expect(failure!.message, defaultMessage);
+      });
+    }
+
+    test('an AI Server Error 400 shows the backend detail', () async {
+      final failure = (await move(
+        _buildRepository(
+          _RecordingAdapter(
+            statusCode: 400,
+            body: {
+              'title': 'AI Server Error',
+              'status': 400,
+              'detail': 'The AI service is temporarily unavailable.',
+            },
+          ),
+        ),
+      )).getLeft().toNullable();
+
+      expect(failure, isA<ProductValidationFailure>());
+      expect(failure!.message, 'The AI service is temporarily unavailable.');
+    });
+
+    test('connection error maps to ProductNetworkFailure', () async {
+      final failure = (await move(
+        _buildRepository(_ConnectionErrorAdapter()),
+      )).getLeft().toNullable();
 
       expect(failure, isA<ProductNetworkFailure>());
     });

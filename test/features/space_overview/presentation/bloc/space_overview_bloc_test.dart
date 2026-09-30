@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/moved_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/repositories/product_repository.dart';
@@ -77,6 +78,13 @@ class _RecordingProductRepository implements ProductRepository {
   Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
     required String productId,
     required ProductChanges changes,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
   }) => throw UnimplementedError();
 }
 
