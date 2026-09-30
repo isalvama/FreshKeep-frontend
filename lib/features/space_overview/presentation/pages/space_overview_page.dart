@@ -6,7 +6,9 @@ import '../../../products/domain/entities/updated_product.dart';
 import '../../../shopping_receipt/domain/entities/persisted_product.dart';
 import '../../../spaces/domain/entities/space.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
+import '../../domain/entities/move_destination.dart';
 import '../bloc/space_overview_bloc.dart';
+import '../widgets/move_destination_sheet.dart';
 
 class SpaceOverviewPage extends StatelessWidget {
   const SpaceOverviewPage({super.key, required this.spaceId, this.space});
@@ -19,10 +21,19 @@ class SpaceOverviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
-      listenWhen: (previous, current) =>
-          previous.deletionStatus != current.deletionStatus,
-      listener: _showDeletionFeedback,
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
+          listenWhen: (previous, current) =>
+              previous.deletionStatus != current.deletionStatus,
+          listener: _showDeletionFeedback,
+        ),
+        BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
+          listenWhen: (previous, current) =>
+              previous.moveStatus != current.moveStatus,
+          listener: _showMoveFeedback,
+        ),
+      ],
       child: _buildBody(),
     );
   }
@@ -127,32 +138,122 @@ class SpaceOverviewPage extends StatelessWidget {
   }
 
   AppBar _buildSelectionAppBar(BuildContext context, SpaceOverviewState state) {
+    const spinner = Padding(
+      padding: EdgeInsets.all(16),
+      child: SizedBox.square(
+        dimension: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.close),
         tooltip: 'Cancel selection',
-        onPressed: () => context.read<SpaceOverviewBloc>().add(
-          const ProductSelectionCleared(),
-        ),
+        onPressed: state.isBusy
+            ? null
+            : () => context.read<SpaceOverviewBloc>().add(
+                const ProductSelectionCleared(),
+              ),
       ),
       title: Text('${state.selectedProductIds.length} selected'),
       actions: [
+        if (state.moveStatus is ProductMoveInProgress)
+          spinner
+        else
+          _buildMoveAction(context, state),
         if (state.deletionStatus is ProductDeletionInProgress)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: SizedBox.square(
-              dimension: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
+          spinner
         else
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Delete selected',
-            onPressed: () =>
-                _confirmDelete(context, state.selectedProductIds.length),
+            onPressed: state.isBusy
+                ? null
+                : () =>
+                      _confirmDelete(context, state.selectedProductIds.length),
           ),
       ],
+    );
+  }
+
+  /// Enabled only for exactly one selected product that has a storage spot:
+  /// the endpoint moves one product and needs its current spot.
+  Widget _buildMoveAction(BuildContext context, SpaceOverviewState state) {
+    final status = state.status;
+    final selected =
+        state.selectedProductIds.length == 1 &&
+            status is SpaceOverviewLoadSuccess
+        ? status.overview.productResults
+              .where((p) => p.id == state.selectedProductIds.single)
+              .firstOrNull
+        : null;
+    final hasNoSpot = selected != null && selected.storageSpotId == null;
+    final canMove = selected != null && !hasNoSpot && !state.isBusy;
+
+    return IconButton(
+      icon: const Icon(Icons.drive_file_move_outline),
+      tooltip: hasNoSpot ? 'This product has no storage spot' : 'Move',
+      onPressed: canMove
+          ? () => _startMove(
+              context,
+              selected,
+              (status as SpaceOverviewLoadSuccess).overview.id,
+            )
+          : null,
+    );
+  }
+
+  /// Destination sheet, then confirmation, then the move request.
+  Future<void> _startMove(
+    BuildContext context,
+    PersistedProduct product,
+    String currentSpaceId,
+  ) async {
+    final destination = await showMoveDestinationSheet(
+      context,
+      currentSpaceId: currentSpaceId,
+      currentStorageSpotId: product.storageSpotId!,
+    );
+    if (destination == null || !context.mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(text: 'Move '),
+              TextSpan(
+                text: product.productName,
+                style: const TextStyle(fontStyle: FontStyle.italic),
+              ),
+              const TextSpan(text: ' to '),
+              TextSpan(
+                text: _destinationLabel(destination),
+                style: const TextStyle(fontStyle: FontStyle.italic),
+              ),
+              const TextSpan(
+                text: '? Its expiration date will be recalculated.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Move'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    context.read<SpaceOverviewBloc>().add(
+      SelectedProductMoveSubmitted(destination),
     );
   }
 
@@ -196,6 +297,20 @@ class SpaceOverviewPage extends StatelessWidget {
       ..showSnackBar(const SnackBar(content: Text('Product updated')));
   }
 
+  void _showMoveFeedback(BuildContext context, SpaceOverviewState state) {
+    final message = switch (state.moveStatus) {
+      ProductMoveSuccess(:final destination, :final newExpirationDate) =>
+        'Moved to ${_destinationLabel(destination)}. '
+            'New expiration date: ${_formatDate(newExpirationDate)}',
+      ProductMoveFailure(:final message) => message,
+      _ => null,
+    };
+    if (message == null) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   void _showDeletionFeedback(BuildContext context, SpaceOverviewState state) {
     final message = switch (state.deletionStatus) {
       ProductDeletionSuccess(:final deletedCount) =>
@@ -209,6 +324,9 @@ class SpaceOverviewPage extends StatelessWidget {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
+
+String _destinationLabel(MoveDestination destination) =>
+    '${destination.spaceName} · ${destination.storageSpotName}';
 
 String _productCount(int count) => count == 1 ? '1 product' : '$count products';
 
