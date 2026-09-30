@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/repositories/product_repository.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_product_usecase.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_products_usecase.dart';
@@ -21,6 +23,17 @@ class _StubSpaceOverviewRepository implements SpaceOverviewRepository {
   Future<Either<SpaceOverviewFailure, SpaceOverview>> getSpaceOverview({
     required String spaceId,
   }) async => result;
+}
+
+/// Never resolves until [completer] is completed, so the bloc stays Loading.
+class _PendingSpaceOverviewRepository implements SpaceOverviewRepository {
+  final Completer<Either<SpaceOverviewFailure, SpaceOverview>> completer =
+      Completer();
+
+  @override
+  Future<Either<SpaceOverviewFailure, SpaceOverview>> getSpaceOverview({
+    required String spaceId,
+  }) => completer.future;
 }
 
 const _overview = SpaceOverview(
@@ -59,6 +72,12 @@ class _RecordingProductRepository implements ProductRepository {
     batchCalls.add(productIds);
     return _respond();
   }
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) => throw UnimplementedError();
 }
 
 PersistedProduct _product(String id) => PersistedProduct(
@@ -414,6 +433,152 @@ void main() {
       expect(_productIds(bloc.state), ['p2', 'p3']);
 
       await bloc.close();
+    });
+  });
+
+  group('ProductUpdated', () {
+    PersistedProduct dated(String id, DateTime date, {String? spot}) =>
+        PersistedProduct(
+          id: id,
+          productName: 'Product $id',
+          expirationDate: date,
+          storageSpotId: spot,
+          productType: 'OTHER',
+          priceAmount: null,
+          currency: null,
+        );
+
+    /// p1 (Oct 1, Fridge), p2 (Oct 2), p3 (Oct 3).
+    final datedOverview = SpaceOverview(
+      id: 'space-1',
+      name: 'Kitchen',
+      emoji: '🏠',
+      storageSpots: const [],
+      productResults: [
+        dated('p1', DateTime(2026, 10, 1), spot: 'spot-1'),
+        dated('p2', DateTime(2026, 10, 2)),
+        dated('p3', DateTime(2026, 10, 3)),
+      ],
+    );
+
+    UpdatedProduct update(String id, DateTime date) => UpdatedProduct(
+      productId: id,
+      name: 'Oat milk',
+      expirationDate: date,
+      productType: 'DAIRY',
+      amount: 2.5,
+      currency: 'EUR',
+    );
+
+    Future<SpaceOverviewBloc> loaded() async {
+      final bloc = _buildBloc(Right(datedOverview));
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await bloc.stream.firstWhere((s) => s.status is SpaceOverviewLoadSuccess);
+      return bloc;
+    }
+
+    List<PersistedProduct> products(SpaceOverviewState state) =>
+        (state.status as SpaceOverviewLoadSuccess).overview.productResults;
+
+    test(
+      'merges the update into the product and keeps its storage spot',
+      () async {
+        final bloc = await loaded();
+
+        bloc.add(ProductUpdated(update('p1', DateTime(2026, 10, 1))));
+        await _settle();
+
+        expect(
+          products(bloc.state).first,
+          PersistedProduct(
+            id: 'p1',
+            productName: 'Oat milk',
+            expirationDate: DateTime(2026, 10, 1),
+            storageSpotId: 'spot-1',
+            productType: 'DAIRY',
+            priceAmount: 2.5,
+            currency: 'EUR',
+          ),
+        );
+        expect(_productIds(bloc.state), ['p1', 'p2', 'p3']);
+
+        await bloc.close();
+      },
+    );
+
+    test('re-sorts by expiration date when the date changes', () async {
+      final bloc = await loaded();
+
+      bloc.add(ProductUpdated(update('p1', DateTime(2026, 10, 5))));
+      await _settle();
+      expect(_productIds(bloc.state), ['p2', 'p3', 'p1']);
+
+      bloc.add(ProductUpdated(update('p3', DateTime(2026, 9, 30))));
+      await _settle();
+      expect(_productIds(bloc.state), ['p3', 'p2', 'p1']);
+
+      await bloc.close();
+    });
+
+    test('keeps the existing order for equal dates', () async {
+      final bloc = await loaded();
+
+      // p3 moves onto p2's date: p2 was first, so it stays first.
+      bloc.add(ProductUpdated(update('p3', DateTime(2026, 10, 2))));
+      await _settle();
+
+      expect(_productIds(bloc.state), ['p1', 'p2', 'p3']);
+
+      await bloc.close();
+    });
+
+    test('an unknown id emits nothing', () async {
+      final bloc = await loaded();
+      final emitted = <SpaceOverviewState>[];
+      final subscription = bloc.stream.listen(emitted.add);
+
+      bloc.add(ProductUpdated(update('missing', DateTime(2026, 10, 1))));
+      await _settle();
+
+      expect(emitted, isEmpty);
+
+      await subscription.cancel();
+      await bloc.close();
+    });
+
+    test('is ignored while loading and after a load failure', () async {
+      final pending = _PendingSpaceOverviewRepository();
+      final productRepository = _RecordingProductRepository();
+      final loading = SpaceOverviewBloc(
+        getSpaceOverviewUseCase: GetSpaceOverviewUseCase(pending),
+        deleteProductUseCase: DeleteProductUseCase(productRepository),
+        deleteProductsUseCase: DeleteProductsUseCase(productRepository),
+      );
+      loading.add(const SpaceOverviewRequested('space-1'));
+      await _settle();
+      expect(loading.state.status, isA<SpaceOverviewLoading>());
+      final loadingEmitted = <SpaceOverviewState>[];
+      final loadingSubscription = loading.stream.listen(loadingEmitted.add);
+      loading.add(ProductUpdated(update('p1', DateTime(2026, 10, 5))));
+      await _settle();
+      expect(loadingEmitted, isEmpty);
+      await loadingSubscription.cancel();
+      await loading.close();
+
+      final failed = _buildBloc(
+        const Left(SpaceOverviewConflictFailure('Not a participant.')),
+      );
+      failed.add(const SpaceOverviewRequested('space-1'));
+      await failed.stream.firstWhere(
+        (s) => s.status is SpaceOverviewLoadFailure,
+      );
+      final failedEmitted = <SpaceOverviewState>[];
+      final failedSubscription = failed.stream.listen(failedEmitted.add);
+      failed.add(ProductUpdated(update('p1', DateTime(2026, 10, 1))));
+      await _settle();
+      expect(failedEmitted, isEmpty);
+      await failedSubscription.cancel();
+      await failed.close();
     });
   });
 }

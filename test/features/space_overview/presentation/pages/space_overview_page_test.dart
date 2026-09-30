@@ -6,6 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/update_product_usecase.dart';
+import 'package:fresh_keep_frontend/features/products/presentation/bloc/edit_product_bloc.dart';
+import 'package:fresh_keep_frontend/features/products/presentation/pages/edit_product_page.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/repositories/product_repository.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_product_usecase.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_products_usecase.dart';
@@ -55,6 +60,12 @@ class _UnusedProductRepository implements ProductRepository {
   Future<Either<ProductFailure, Unit>> deleteProducts({
     required List<String> productIds,
   }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) => throw UnimplementedError();
 }
 
 /// Records every delete call. Each call resolves with [result], or waits on
@@ -85,6 +96,39 @@ class _RecordingProductRepository implements ProductRepository {
     batchCalls.add(productIds);
     return _respond();
   }
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) => throw UnimplementedError();
+}
+
+/// Answers every update with [result] and records the calls.
+class _UpdatingProductRepository implements ProductRepository {
+  _UpdatingProductRepository(this.result);
+
+  final UpdatedProduct result;
+  final List<(String, ProductChanges)> updateCalls = [];
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) async {
+    updateCalls.add((productId, changes));
+    return Right(result);
+  }
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProduct({
+    required String productId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProducts({
+    required List<String> productIds,
+  }) => throw UnimplementedError();
 }
 
 const _fridge = StorageSpot(
@@ -445,12 +489,11 @@ void main() {
       return bloc;
     }
 
-    testWidgets('outside selection mode there are no checkboxes and tapping '
-        'a row selects nothing', (tester) async {
+    // Tapping a row outside selection mode opens the editor: see "editing".
+    testWidgets('outside selection mode there are no checkboxes', (
+      tester,
+    ) async {
       await pumpLoaded(tester);
-
-      await tester.tap(find.text('Milk'));
-      await tester.pumpAndSettle();
 
       expect(find.byType(Checkbox), findsNothing);
       expect(appBarText('🏠 Kitchen'), findsOneWidget);
@@ -707,6 +750,139 @@ void main() {
       expect(products.singleCalls, ['product-1', 'product-1']);
       expect(find.text('Milk'), findsNothing);
       expect(find.text('1 product deleted'), findsOneWidget);
+    });
+  });
+
+  group('editing', () {
+    /// Milk, renamed and moved to after Bread's Sep 20.
+    final oatMilk = UpdatedProduct(
+      productId: 'product-1',
+      name: 'Oat milk',
+      expirationDate: DateTime(2026, 9, 25),
+      productType: 'DAIRY',
+      amount: 2.5,
+      currency: 'USD',
+    );
+
+    /// Mirrors the app's overview and edit routes.
+    Future<(SpaceOverviewBloc, _UpdatingProductRepository)> pumpLoaded(
+      WidgetTester tester,
+    ) async {
+      final products = _UpdatingProductRepository(oatMilk);
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      final router = GoRouter(
+        initialLocation: '/space-overview/space-1',
+        routes: [
+          GoRoute(
+            path: '/space-overview/:spaceId',
+            builder: (context, state) => BlocProvider<SpaceOverviewBloc>.value(
+              value: bloc,
+              child: SpaceOverviewPage(
+                spaceId: state.pathParameters['spaceId']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/space-overview/:spaceId/products/:productId/edit',
+            builder: (context, state) => BlocProvider(
+              create: (_) => EditProductBloc(
+                updateProductUseCase: UpdateProductUseCase(products),
+                product: state.extra as PersistedProduct,
+              ),
+              child: const EditProductPage(),
+            ),
+          ),
+        ],
+      );
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+      return (bloc, products);
+    }
+
+    List<String> rowTitles(WidgetTester tester) => [
+      for (final tile in tester.widgetList<ListTile>(find.byType(ListTile)))
+        ((tile.title as Text).data)!,
+    ];
+
+    testWidgets('tapping a row outside selection mode opens its editor', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('edit_product_name')))
+            .controller!
+            .text,
+        'Milk',
+      );
+    });
+
+    testWidgets('saving returns to the overview with the row updated and '
+        're-sorted, and shows "Product updated"', (tester) async {
+      final (bloc, products) = await pumpLoaded(tester);
+      expect(rowTitles(tester), ['Milk', 'Bread']);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('edit_product_name')),
+        'Oat milk',
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(products.updateCalls, [
+        ('product-1', const ProductChanges(name: 'Oat milk')),
+      ]);
+      expect(find.text('Edit product'), findsNothing);
+      expect(rowTitles(tester), ['Bread', 'Oat milk']);
+      expect(find.textContaining('Fridge'), findsOneWidget);
+      expect(find.textContaining('exp. 2026-09-25'), findsOneWidget);
+      expect(find.text('Product updated'), findsOneWidget);
+
+      final overview = (bloc.state.status as SpaceOverviewLoadSuccess).overview;
+      expect(overview.productResults.last.storageSpotId, 'spot-1');
+    });
+
+    testWidgets('closing without saving leaves the list unchanged and shows '
+        'no SnackBar', (tester) async {
+      final (_, products) = await pumpLoaded(tester);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsNothing);
+      expect(rowTitles(tester), ['Milk', 'Bread']);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(products.updateCalls, isEmpty);
+    });
+
+    testWidgets('in selection mode, tapping a row toggles it and does not '
+        'open the editor', (tester) async {
+      final (bloc, _) = await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsNothing);
+      expect(bloc.state.selectedProductIds, {'product-1', 'product-2'});
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsNothing);
+      expect(bloc.state.selectedProductIds, {'product-2'});
     });
   });
 }

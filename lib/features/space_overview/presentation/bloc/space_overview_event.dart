@@ -24,3 +24,10 @@ final class ProductSelectionCleared extends SpaceOverviewEvent {
 final class SelectedProductsDeleteSubmitted extends SpaceOverviewEvent {
   const SelectedProductsDeleteSubmitted();
 }
+
+/// A product was edited and saved; merge it into the loaded overview.
+final class ProductUpdated extends SpaceOverviewEvent {
+  final UpdatedProduct product;
+
+  const ProductUpdated(this.product);
+}

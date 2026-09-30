@@ -10,6 +10,9 @@ import '../features/auth/presentation/pages/home_page.dart';
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/pages/register_page.dart';
 import '../features/auth/presentation/pages/splash_page.dart';
+import '../features/products/presentation/bloc/edit_product_bloc.dart';
+import '../features/products/presentation/pages/edit_product_page.dart';
+import '../features/shopping_receipt/domain/entities/persisted_product.dart';
 import '../features/shopping_receipt/presentation/pages/confirm_image_page.dart';
 import '../features/shopping_receipt/presentation/pages/receipt_error_page.dart';
 import '../features/shopping_receipt/presentation/pages/receipt_processing_page.dart';
@@ -93,6 +96,16 @@ GoRouter buildAppRouter(AuthBloc authBloc) {
                 getIt<SpaceOverviewBloc>()
                   ..add(SpaceOverviewRequested(spaceId)),
             child: SpaceOverviewPage(spaceId: spaceId, space: space),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/space-overview/:spaceId/products/:productId/edit',
+        builder: (context, state) {
+          final product = state.extra as PersistedProduct;
+          return BlocProvider(
+            create: (_) => getIt<EditProductBloc>(param1: product),
+            child: const EditProductPage(),
           );
         },
       ),
