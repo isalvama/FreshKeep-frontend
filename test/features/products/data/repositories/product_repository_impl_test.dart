@@ -7,6 +7,10 @@ import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/products/data/datasources/product_remote_datasource.dart';
 import 'package:fresh_keep_frontend/features/products/data/repositories/product_repository_impl.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/currency.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/product_type.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
 
 /// Replies with [statusCode] (and [body] as JSON, if any) and records every
 /// request it receives.
@@ -179,5 +183,174 @@ void main() {
         },
       );
     }
+  });
+
+  group('ProductRepositoryImpl.updateProduct', () {
+    const updatedJson = {
+      'productId': 'product-1',
+      'name': 'Oat milk',
+      'expirationDate': '2026-10-05',
+      'productType': 'DAIRY',
+      'amount': 2.5,
+      'currency': 'EUR',
+    };
+
+    test('sends PATCH /api/v1/products/<id> with every changed field and maps '
+        '200 to Right(UpdatedProduct)', () async {
+      final adapter = _RecordingAdapter(statusCode: 200, body: updatedJson);
+      final repository = _buildRepository(adapter);
+
+      final result = await repository.updateProduct(
+        productId: 'product-1',
+        changes: ProductChanges(
+          name: 'Oat milk',
+          expirationDate: DateTime(2026, 10, 5),
+          productType: ProductType.DAIRY,
+          amount: 2.5,
+          currency: Currency.EUR,
+        ),
+      );
+
+      expect(
+        result,
+        Right<ProductFailure, UpdatedProduct>(
+          UpdatedProduct(
+            productId: 'product-1',
+            name: 'Oat milk',
+            expirationDate: DateTime(2026, 10, 5),
+            productType: 'DAIRY',
+            amount: 2.5,
+            currency: 'EUR',
+          ),
+        ),
+      );
+      final request = adapter.requests.single;
+      expect(request.method, 'PATCH');
+      expect(request.path, '/api/v1/products/product-1');
+      expect(request.data, {
+        'name': 'Oat milk',
+        'expirationDate': '2026-10-05',
+        'productType': 'DAIRY',
+        'amount': 2.5,
+        'currency': 'EUR',
+      });
+    });
+
+    test('leaves null fields out of the body', () async {
+      final adapter = _RecordingAdapter(statusCode: 200, body: updatedJson);
+      final repository = _buildRepository(adapter);
+
+      await repository.updateProduct(
+        productId: 'product-1',
+        changes: const ProductChanges(
+          productType: ProductType.OTHER_FRESH_PRODUCTS,
+        ),
+      );
+
+      expect(adapter.requests.single.data, {
+        'productType': 'OTHER_FRESH_PRODUCTS',
+      });
+    });
+
+    test('sends the date as yyyy-MM-dd from its local calendar day', () async {
+      final adapter = _RecordingAdapter(statusCode: 200, body: updatedJson);
+      final repository = _buildRepository(adapter);
+
+      await repository.updateProduct(
+        productId: 'product-1',
+        changes: ProductChanges(expirationDate: DateTime(2026, 1, 3, 23, 59)),
+      );
+
+      expect(adapter.requests.single.data, {'expirationDate': '2026-01-03'});
+    });
+
+    test('parses a response with null amount and currency, and an integer '
+        'amount', () async {
+      final repository = _buildRepository(
+        _RecordingAdapter(
+          statusCode: 200,
+          body: {...updatedJson, 'amount': null, 'currency': null},
+        ),
+      );
+
+      final product = (await repository.updateProduct(
+        productId: 'product-1',
+        changes: const ProductChanges(name: 'Oat milk'),
+      )).getRight().toNullable();
+
+      expect(product!.amount, isNull);
+      expect(product.currency, isNull);
+
+      final intRepository = _buildRepository(
+        _RecordingAdapter(statusCode: 200, body: {...updatedJson, 'amount': 3}),
+      );
+      final intProduct = (await intRepository.updateProduct(
+        productId: 'product-1',
+        changes: const ProductChanges(amount: 3),
+      )).getRight().toNullable();
+
+      expect(intProduct!.amount, 3.0);
+    });
+
+    final cases = <int, (TypeMatcher<ProductFailure>, String)>{
+      400: (
+        isA<ProductValidationFailure>(),
+        "This product couldn't be updated. Check the values and try again.",
+      ),
+      401: (
+        isA<ProductUnauthorizedFailure>(),
+        'Your session has expired. Please log in again.',
+      ),
+      403: (
+        isA<ProductForbiddenFailure>(),
+        'You are not allowed to perform this action.',
+      ),
+      409: (
+        isA<ProductConflictFailure>(),
+        'You are not a participant of this space.',
+      ),
+    };
+
+    Future<ProductFailure?> update(ProductRepositoryImpl repository) async =>
+        (await repository.updateProduct(
+          productId: 'product-1',
+          changes: const ProductChanges(name: 'Oat milk'),
+        )).getLeft().toNullable();
+
+    for (final entry in cases.entries) {
+      final status = entry.key;
+      final (matcher, defaultMessage) = entry.value;
+
+      test('$status uses the backend detail', () async {
+        final failure = await update(
+          _buildRepository(
+            _RecordingAdapter(
+              statusCode: status,
+              body: {'detail': 'backend says $status'},
+            ),
+          ),
+        );
+
+        expect(failure, matcher);
+        expect(failure!.message, 'backend says $status');
+      });
+
+      test('$status without detail uses the default message', () async {
+        final failure = await update(
+          _buildRepository(
+            _RecordingAdapter(statusCode: status, body: <String, dynamic>{}),
+          ),
+        );
+
+        expect(failure, matcher);
+        expect(failure!.message, defaultMessage);
+      });
+    }
+
+    test('connection error maps to ProductNetworkFailure', () async {
+      final failure = await update(_buildRepository(_ConnectionErrorAdapter()));
+
+      expect(failure, isA<ProductNetworkFailure>());
+    });
   });
 }

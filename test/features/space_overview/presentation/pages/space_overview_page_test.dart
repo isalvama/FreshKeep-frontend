@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/repositories/product_repository.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_product_usecase.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_products_usecase.dart';
@@ -55,6 +57,12 @@ class _UnusedProductRepository implements ProductRepository {
   Future<Either<ProductFailure, Unit>> deleteProducts({
     required List<String> productIds,
   }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) => throw UnimplementedError();
 }
 
 /// Records every delete call. Each call resolves with [result], or waits on
@@ -85,6 +93,12 @@ class _RecordingProductRepository implements ProductRepository {
     batchCalls.add(productIds);
     return _respond();
   }
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) => throw UnimplementedError();
 }
 
 const _fridge = StorageSpot(

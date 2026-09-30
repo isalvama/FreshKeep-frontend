@@ -1,6 +1,6 @@
 # SPEC 09 — Delete products from a space's overview
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 06 (confirm-reprocess-and-space-overview) — extends `SpaceOverviewBloc`, its state and `SpaceOverviewPage`; SPEC 08 (open-space-overview-from-home) — the overview's AppBar (title and leading button) gets a selection-mode variant. Uses the backend Product API: `DELETE /api/v1/products/{id}` and `DELETE /api/v1/products` (`api_contract.md`, "Product API Contract" §3–4).
 > **Date:** 2026-09-30
 > **Objective:** From a space's overview, the user can select one or more products with a long press and delete them after confirming, removing them from the list on success.
