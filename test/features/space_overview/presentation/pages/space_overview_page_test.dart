@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:go_router/go_router.dart';
+import 'package:fresh_keep_frontend/core/di/service_locator.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/moved_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
@@ -28,7 +29,9 @@ import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_input.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/repositories/space_repository.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/usecases/create_space_invitation_usecase.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/usecases/get_user_spaces_usecase.dart';
+import 'package:fresh_keep_frontend/features/spaces/presentation/bloc/space_invitation_bloc.dart';
 import 'package:fresh_keep_frontend/features/spaces/presentation/bloc/spaces_bloc.dart';
 
 class _StubSpaceOverviewRepository implements SpaceOverviewRepository {
@@ -264,7 +267,52 @@ GoRouter _buildRouter(SpaceOverviewBloc bloc, {required String initial}) {
   );
 }
 
+/// Answers each `createInvitation` call with the next entry of [results]; a
+/// `null` entry waits on [pending]. Unused by tests that never tap Invite.
+class _InvitationSpaceRepository implements SpaceRepository {
+  final List<Either<SpaceFailure, SpaceInvitation>?> results = [];
+  final List<String> calls = [];
+
+  /// Created on the call rather than in `setUp`, so it completes inside the
+  /// widget test's fake-async zone.
+  Completer<Either<SpaceFailure, SpaceInvitation>>? pending;
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) async {
+    final result = results[calls.length];
+    calls.add(spaceId);
+    return result ?? (pending = Completer()).future;
+  }
+
+  @override
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces() =>
+      throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, Space>> createSpace({
+    required String spaceName,
+    required String emoji,
+    required List<StorageSpotInput> storageSpots,
+  }) => throw UnimplementedError();
+}
+
+late _InvitationSpaceRepository _invitations;
+
 void main() {
+  // The page takes its SpaceInvitationBloc from get_it.
+  setUp(() {
+    _invitations = _InvitationSpaceRepository();
+    getIt.registerFactory(
+      () => SpaceInvitationBloc(
+        createSpaceInvitationUseCase: CreateSpaceInvitationUseCase(
+          _invitations,
+        ),
+      ),
+    );
+  });
+  tearDown(() => getIt.reset());
   testWidgets('shows a loading indicator while fetching', (tester) async {
     final bloc = _buildBloc(_PendingSpaceOverviewRepository());
 
@@ -1242,6 +1290,174 @@ void main() {
       expect(products.moveCalls, hasLength(1));
       expect(find.text('Milk'), findsNothing);
       expect(find.textContaining('selected'), findsNothing);
+    });
+  });
+
+  group('inviting', () {
+    final invitation = SpaceInvitation(
+      id: 'invitation-1',
+      token: 'token-1',
+      spaceId: 'space-1',
+      expiresAt: DateTime.utc(2026, 9, 29, 21),
+    );
+    final secondInvitation = SpaceInvitation(
+      id: 'invitation-2',
+      token: 'token-2',
+      spaceId: 'space-1',
+      expiresAt: DateTime.utc(2026, 9, 29, 22),
+    );
+    const conflict = Left<SpaceFailure, SpaceInvitation>(
+      SpaceConflictFailure("You're not a participant of this space."),
+    );
+
+    final inviteAction = find.byTooltip('Invite');
+
+    Future<void> pumpLoaded(WidgetTester tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('with the overview loaded, the AppBar shows Invite', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: inviteAction),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.person_add_alt_1), findsOneWidget);
+    });
+
+    testWidgets('Invite is not shown while the overview is loading', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_PendingSpaceOverviewRepository());
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pump();
+
+      expect(inviteAction, findsNothing);
+    });
+
+    testWidgets('Invite is not shown when the overview failed to load', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([
+          const Left(SpaceOverviewNetworkFailure('No connection.')),
+        ]),
+      );
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No connection.'), findsOneWidget);
+      expect(inviteAction, findsNothing);
+    });
+
+    testWidgets('Invite is not shown in selection mode', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 selected'), findsOneWidget);
+      expect(inviteAction, findsNothing);
+    });
+
+    testWidgets('tapping Invite shows a spinner until the invitation is '
+        'created, then the dialog with the link', (tester) async {
+      _invitations.results.add(null);
+      await pumpLoaded(tester);
+
+      await tester.tap(inviteAction);
+      await tester.pump();
+
+      expect(_invitations.calls, ['space-1']);
+      expect(inviteAction, findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+
+      _invitations.pending!.complete(Right(invitation));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invite to Kitchen'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is SelectableText && w.data == 'freshkeep://join?token=token-1',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('Close leaves the overview unchanged, and Invite again creates '
+        'a new invitation', (tester) async {
+      _invitations.results.addAll([Right(invitation), Right(secondInvitation)]);
+      await pumpLoaded(tester);
+
+      await tester.tap(inviteAction);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invite to Kitchen'), findsNothing);
+      expect(find.text('🏠 Kitchen'), findsOneWidget);
+      expect(find.text('Milk'), findsOneWidget);
+      expect(find.text('Bread'), findsOneWidget);
+
+      await tester.tap(inviteAction);
+      await tester.pumpAndSettle();
+
+      expect(_invitations.calls, ['space-1', 'space-1']);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is SelectableText && w.data == 'freshkeep://join?token=token-2',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('on failure, a SnackBar shows the message, no dialog opens '
+        'and Invite can be tapped again', (tester) async {
+      _invitations.results.addAll([conflict, conflict]);
+      await pumpLoaded(tester);
+
+      await tester.tap(inviteAction);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text("You're not a participant of this space."),
+        findsOneWidget,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.person_add_alt_1),
+            )
+            .onPressed,
+        isNotNull,
+      );
+
+      await tester.tap(inviteAction);
+      await tester.pumpAndSettle();
+
+      expect(_invitations.calls, hasLength(2));
+      expect(
+        find.text("You're not a participant of this space."),
+        findsOneWidget,
+      );
     });
   });
 }
