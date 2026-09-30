@@ -22,7 +22,9 @@ import '../features/shopping_receipt/presentation/pages/space_picker_page.dart';
 import '../features/space_overview/presentation/bloc/space_overview_bloc.dart';
 import '../features/space_overview/presentation/pages/space_overview_page.dart';
 import '../features/spaces/domain/entities/space.dart';
+import '../features/spaces/presentation/bloc/join_space_bloc.dart';
 import '../features/spaces/presentation/pages/create_space_result.dart';
+import '../features/spaces/presentation/pages/join_space_page.dart';
 import '../features/spaces/presentation/pages/new_space_page.dart';
 import '../features/spaces/presentation/pages/space_status_page.dart';
 
@@ -98,6 +100,13 @@ GoRouter buildAppRouter(AuthBloc authBloc) {
             child: SpaceOverviewPage(spaceId: spaceId, space: space),
           );
         },
+      ),
+      GoRoute(
+        path: '/join',
+        builder: (context, state) => BlocProvider(
+          create: (_) => getIt<JoinSpaceBloc>(),
+          child: JoinSpacePage(token: state.uri.queryParameters['token'] ?? ''),
+        ),
       ),
       GoRoute(
         path: '/space-overview/:spaceId/products/:productId/edit',
