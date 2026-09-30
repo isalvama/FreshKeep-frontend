@@ -1,6 +1,6 @@
 # SPEC 11 — Move a product to another storage spot
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:**
 > - SPEC 04 (fetch-and-display-spaces-on-login): reads the user's spaces and their storage spots from `SpacesBloc`.
 > - SPEC 09 (delete-products-from-overview): reuses selection mode, `lib/features/products/`, `ProductRepository`, `ProductRemoteDataSource` and `ProductFailure`, and adds an action to the selection-mode AppBar.
