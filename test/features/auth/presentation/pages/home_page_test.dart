@@ -13,6 +13,7 @@ import 'package:fresh_keep_frontend/features/auth/domain/usecases/logout_usecase
 import 'package:fresh_keep_frontend/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:fresh_keep_frontend/features/auth/presentation/pages/home_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space_invitation.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_input.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/repositories/space_repository.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/usecases/get_user_spaces_usecase.dart';
@@ -35,6 +36,11 @@ class _PendingSpaceRepository implements SpaceRepository {
 
   @override
   Future<Either<SpaceFailure, List<Space>>> getUserSpaces() => completer.future;
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) => throw UnimplementedError();
 }
 
 /// Returns [results] in order, one per call, holding on the last entry once exhausted.
@@ -57,6 +63,11 @@ class _SequencedSpaceRepository implements SpaceRepository {
     if (_callCount < results.length - 1) _callCount++;
     return result;
   }
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) => throw UnimplementedError();
 }
 
 /// One [Completer] per `getUserSpaces` call, so a test can hold the refresh
@@ -77,6 +88,11 @@ class _ScriptedSpaceRepository implements SpaceRepository {
     calls.add(completer);
     return completer.future;
   }
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) => throw UnimplementedError();
 }
 
 const _cabin = Space(

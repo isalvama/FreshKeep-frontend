@@ -25,6 +25,7 @@ import '../../features/space_overview/presentation/bloc/space_overview_bloc.dart
 import '../../features/spaces/data/datasources/space_remote_datasource.dart';
 import '../../features/spaces/data/repositories/space_repository_impl.dart';
 import '../../features/spaces/domain/repositories/space_repository.dart';
+import '../../features/spaces/domain/usecases/create_space_invitation_usecase.dart';
 import '../../features/spaces/domain/usecases/create_space_usecase.dart';
 import '../../features/spaces/domain/usecases/get_user_spaces_usecase.dart';
 import '../../features/spaces/presentation/bloc/create_space_bloc.dart';
@@ -41,6 +42,7 @@ void setupServiceLocator({required Dio dio}) {
   );
   getIt.registerFactory(() => CreateSpaceUseCase(getIt()));
   getIt.registerFactory(() => GetUserSpacesUseCase(getIt()));
+  getIt.registerFactory(() => CreateSpaceInvitationUseCase(getIt()));
   getIt.registerLazySingleton(
     () => SpacesBloc(getUserSpacesUseCase: getIt()),
   );

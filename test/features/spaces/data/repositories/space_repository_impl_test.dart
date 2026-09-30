@@ -8,6 +8,7 @@ import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/spaces/data/datasources/space_remote_datasource.dart';
 import 'package:fresh_keep_frontend/features/spaces/data/repositories/space_repository_impl.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space_invitation.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_input.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
 
@@ -35,6 +36,23 @@ class _JsonResponseAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+/// Answers with [statusCode] and [body], recording the request it received.
+class _RecordingAdapter extends _JsonResponseAdapter {
+  _RecordingAdapter({required super.statusCode, super.body});
+
+  RequestOptions? request;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    request = options;
+    return super.fetch(options, requestStream, cancelFuture);
+  }
 }
 
 class _ConnectionErrorAdapter implements HttpClientAdapter {
@@ -238,6 +256,121 @@ void main() {
       final repository = _buildRepository(_ConnectionErrorAdapter());
 
       final result = await _getUserSpaces(repository);
+
+      expect(result.getLeft().toNullable(), isA<SpaceNetworkFailure>());
+    });
+  });
+
+  group('SpaceRepositoryImpl.createInvitation', () {
+    const createdBody = {
+      'id': 'invitation-1',
+      'token': 'the-invitation-token',
+      'spaceId': 'space-1',
+      'userCreatorId': 'user-1',
+      'expiresAt': '2026-09-29T21:00:00',
+      'isActive': true,
+    };
+
+    test(
+      'sends POST /api/v1/spaces/{spaceId}/invitations with no body',
+      () async {
+        final adapter = _RecordingAdapter(statusCode: 201, body: createdBody);
+        final repository = _buildRepository(adapter);
+
+        await repository.createInvitation(spaceId: 'space-1');
+
+        expect(adapter.request?.method, 'POST');
+        expect(adapter.request?.path, '/api/v1/spaces/space-1/invitations');
+        expect(adapter.request?.data, isNull);
+      },
+    );
+
+    test('a 201 maps to a SpaceInvitation with expiresAt in UTC', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 201, body: createdBody),
+      );
+
+      final result = await repository.createInvitation(spaceId: 'space-1');
+
+      expect(
+        result.getRight().toNullable(),
+        SpaceInvitation(
+          id: 'invitation-1',
+          token: 'the-invitation-token',
+          spaceId: 'space-1',
+          expiresAt: DateTime.utc(2026, 9, 29, 21),
+        ),
+      );
+    });
+
+    final failureCases = <(int, String, TypeMatcher<SpaceFailure>, String)>[
+      (
+        400,
+        'bad space id',
+        isA<SpaceValidationFailure>(),
+        'Please check the entered data.',
+      ),
+      (
+        401,
+        'no token',
+        isA<SpaceUnauthorizedFailure>(),
+        'Your session has expired. Please log in again.',
+      ),
+      (
+        403,
+        'wrong role',
+        isA<SpaceForbiddenFailure>(),
+        'You are not allowed to perform this action.',
+      ),
+      (
+        409,
+        'not a participant',
+        isA<SpaceConflictFailure>(),
+        "You're not a participant of this space.",
+      ),
+      (
+        500,
+        'boom',
+        isA<SpaceServerFailure>(),
+        'Something went wrong. Please try again.',
+      ),
+    ];
+
+    for (final (status, detail, matcher, fallback) in failureCases) {
+      test('$status maps to the failure with the backend detail', () async {
+        final repository = _buildRepository(
+          _JsonResponseAdapter(statusCode: status, body: {'detail': detail}),
+        );
+
+        final failure = (await repository.createInvitation(
+          spaceId: 'space-1',
+        )).getLeft().toNullable();
+
+        expect(failure, matcher);
+        expect(failure?.message, detail);
+      });
+
+      test(
+        '$status without detail falls back to the default message',
+        () async {
+          final repository = _buildRepository(
+            _JsonResponseAdapter(statusCode: status, body: const {}),
+          );
+
+          final failure = (await repository.createInvitation(
+            spaceId: 'space-1',
+          )).getLeft().toNullable();
+
+          expect(failure, matcher);
+          expect(failure?.message, fallback);
+        },
+      );
+    }
+
+    test('connection error maps to SpaceNetworkFailure', () async {
+      final repository = _buildRepository(_ConnectionErrorAdapter());
+
+      final result = await repository.createInvitation(spaceId: 'space-1');
 
       expect(result.getLeft().toNullable(), isA<SpaceNetworkFailure>());
     });

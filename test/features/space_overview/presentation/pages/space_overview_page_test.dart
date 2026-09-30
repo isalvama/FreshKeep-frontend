@@ -23,6 +23,7 @@ import 'package:fresh_keep_frontend/features/space_overview/domain/usecases/get_
 import 'package:fresh_keep_frontend/features/space_overview/presentation/bloc/space_overview_bloc.dart';
 import 'package:fresh_keep_frontend/features/space_overview/presentation/pages/space_overview_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space_invitation.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_input.dart';
@@ -1293,5 +1294,10 @@ class _StubSpaceRepository implements SpaceRepository {
     required String spaceName,
     required String emoji,
     required List<StorageSpotInput> storageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
   }) => throw UnimplementedError();
 }

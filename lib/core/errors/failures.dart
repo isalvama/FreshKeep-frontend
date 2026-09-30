@@ -46,6 +46,10 @@ class SpaceForbiddenFailure extends SpaceFailure {
   const SpaceForbiddenFailure(super.message); // 403
 }
 
+class SpaceConflictFailure extends SpaceFailure {
+  const SpaceConflictFailure(super.message); // 409 — not a participant
+}
+
 class SpaceServerFailure extends SpaceFailure {
   const SpaceServerFailure(super.message); // 500
 }

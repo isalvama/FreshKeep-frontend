@@ -3,6 +3,7 @@ import 'package:fpdart/fpdart.dart';
 
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/space.dart';
+import '../../domain/entities/space_invitation.dart';
 import '../../domain/entities/storage_spot_input.dart';
 import '../../domain/repositories/space_repository.dart';
 import '../datasources/space_remote_datasource.dart';
@@ -46,6 +47,18 @@ class SpaceRepositoryImpl implements SpaceRepository {
     }
   }
 
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) async {
+    try {
+      final response = await remoteDataSource.createInvitation(spaceId);
+      return Right(response.toEntity());
+    } on DioException catch (e) {
+      return Left(_mapDioException(e));
+    }
+  }
+
   SpaceFailure _mapDioException(DioException e) {
     final status = e.response?.statusCode;
     final data = e.response?.data;
@@ -61,6 +74,10 @@ class SpaceRepositoryImpl implements SpaceRepository {
       case 403:
         return SpaceForbiddenFailure(
           detail ?? 'You are not allowed to perform this action.',
+        );
+      case 409:
+        return SpaceConflictFailure(
+          detail ?? "You're not a participant of this space.",
         );
       case 500:
         return SpaceServerFailure(

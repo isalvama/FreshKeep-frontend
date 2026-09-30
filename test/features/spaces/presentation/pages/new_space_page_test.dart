@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space_invitation.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_input.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/repositories/space_repository.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/usecases/create_space_usecase.dart';
@@ -24,6 +25,11 @@ class _NeverCalledSpaceRepository implements SpaceRepository {
   Future<Either<SpaceFailure, List<Space>>> getUserSpaces() {
     throw StateError('getUserSpaces should not be called in this test');
   }
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) => throw UnimplementedError();
 }
 
 Future<void> _pumpNewSpacePage(WidgetTester tester) async {
