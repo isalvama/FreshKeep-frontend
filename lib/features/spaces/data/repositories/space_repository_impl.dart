@@ -59,6 +59,35 @@ class SpaceRepositoryImpl implements SpaceRepository {
     }
   }
 
+  @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) async {
+    try {
+      return Right(await remoteDataSource.joinInvitation(token));
+    } on DioException catch (e) {
+      return Left(_mapJoinDioException(e));
+    }
+  }
+
+  /// Joining has its own 409 and 400 texts: the shared 409 default ("not a
+  /// participant") means the opposite here, so its `detail` is ignored too.
+  SpaceFailure _mapJoinDioException(DioException e) {
+    final data = e.response?.data;
+    final detail = data is Map ? data['detail'] as String? : null;
+
+    switch (e.response?.statusCode) {
+      case 409:
+        return const SpaceConflictFailure("You're already in this space.");
+      case 400:
+        return SpaceValidationFailure(
+          detail ?? 'This invitation is invalid or has expired.',
+        );
+      default:
+        return _mapDioException(e);
+    }
+  }
+
   SpaceFailure _mapDioException(DioException e) {
     final status = e.response?.statusCode;
     final data = e.response?.data;

@@ -22,6 +22,11 @@ class _InvitationRepository implements SpaceRepository {
   final List<String> calls = [];
 
   @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
     required String spaceId,
   }) async {

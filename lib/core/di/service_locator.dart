@@ -26,11 +26,14 @@ import '../../features/spaces/data/datasources/space_remote_datasource.dart';
 import '../../features/spaces/data/repositories/space_repository_impl.dart';
 import '../../features/spaces/domain/repositories/space_repository.dart';
 import '../../features/spaces/domain/usecases/create_space_invitation_usecase.dart';
+import '../../features/spaces/domain/usecases/join_space_invitation_usecase.dart';
 import '../../features/spaces/domain/usecases/create_space_usecase.dart';
 import '../../features/spaces/domain/usecases/get_user_spaces_usecase.dart';
 import '../../features/spaces/presentation/bloc/create_space_bloc.dart';
+import '../../features/spaces/presentation/bloc/join_space_bloc.dart';
 import '../../features/spaces/presentation/bloc/space_invitation_bloc.dart';
 import '../../features/spaces/presentation/bloc/spaces_bloc.dart';
+import '../deep_links/pending_invitation_store.dart';
 
 final getIt = GetIt.instance;
 
@@ -44,6 +47,7 @@ void setupServiceLocator({required Dio dio}) {
   getIt.registerFactory(() => CreateSpaceUseCase(getIt()));
   getIt.registerFactory(() => GetUserSpacesUseCase(getIt()));
   getIt.registerFactory(() => CreateSpaceInvitationUseCase(getIt()));
+  getIt.registerFactory(() => JoinSpaceInvitationUseCase(getIt()));
   getIt.registerLazySingleton(
     () => SpacesBloc(getUserSpacesUseCase: getIt()),
   );
@@ -53,6 +57,10 @@ void setupServiceLocator({required Dio dio}) {
   getIt.registerFactory(
     () => SpaceInvitationBloc(createSpaceInvitationUseCase: getIt()),
   );
+  getIt.registerFactory(
+    () => JoinSpaceBloc(joinSpaceInvitationUseCase: getIt()),
+  );
+  getIt.registerLazySingleton(() => PendingInvitationStore());
 
   getIt.registerLazySingleton<ShoppingReceiptRemoteDataSource>(
     () => ShoppingReceiptRemoteDataSource(dio),

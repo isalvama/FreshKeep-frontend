@@ -278,6 +278,11 @@ class _InvitationSpaceRepository implements SpaceRepository {
   Completer<Either<SpaceFailure, SpaceInvitation>>? pending;
 
   @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
     required String spaceId,
   }) async {
@@ -1510,6 +1515,11 @@ class _StubSpaceRepository implements SpaceRepository {
     required String spaceName,
     required String emoji,
     required List<StorageSpotInput> storageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
   }) => throw UnimplementedError();
 
   @override

@@ -39,6 +39,11 @@ class _SpaceRepository implements SpaceRepository {
   }) => throw UnimplementedError();
 
   @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
     required String spaceId,
   }) => throw UnimplementedError();

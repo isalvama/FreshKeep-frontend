@@ -375,4 +375,150 @@ void main() {
       expect(result.getLeft().toNullable(), isA<SpaceNetworkFailure>());
     });
   });
+
+  group('SpaceRepositoryImpl.joinInvitation', () {
+    test(
+      'sends POST /api/v1/spaces/invitations/{token}/join with no body',
+      () async {
+        final adapter = _RecordingAdapter(
+          statusCode: 200,
+          body: const {'spaceId': 'space-9'},
+        );
+        final repository = _buildRepository(adapter);
+
+        await repository.joinInvitation(token: 'abc');
+
+        expect(adapter.request?.method, 'POST');
+        expect(adapter.request?.path, '/api/v1/spaces/invitations/abc/join');
+        expect(adapter.request?.data, isNull);
+      },
+    );
+
+    test('URL-encodes the token as a path segment', () async {
+      final adapter = _RecordingAdapter(
+        statusCode: 200,
+        body: const {'spaceId': 'space-9'},
+      );
+      final repository = _buildRepository(adapter);
+
+      await repository.joinInvitation(token: 'a b/c');
+
+      expect(
+        adapter.request?.path,
+        '/api/v1/spaces/invitations/a%20b%2Fc/join',
+      );
+    });
+
+    test('a 200 returns the joined spaceId', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(
+          statusCode: 200,
+          body: const {'spaceId': 'space-9'},
+        ),
+      );
+
+      final result = await repository.joinInvitation(token: 'abc');
+
+      expect(result, const Right<SpaceFailure, String>('space-9'));
+    });
+
+    for (final body in const [
+      {'detail': 'Conflict Error'},
+      <String, String>{},
+    ]) {
+      test('409 maps to SpaceConflictFailure with the fixed message '
+          '(body: $body)', () async {
+        final repository = _buildRepository(
+          _JsonResponseAdapter(statusCode: 409, body: body),
+        );
+
+        final failure = (await repository.joinInvitation(
+          token: 'abc',
+        )).getLeft().toNullable();
+
+        expect(failure, isA<SpaceConflictFailure>());
+        expect(failure?.message, "You're already in this space.");
+      });
+    }
+
+    test(
+      '400 maps to SpaceValidationFailure with the backend detail',
+      () async {
+        final repository = _buildRepository(
+          _JsonResponseAdapter(
+            statusCode: 400,
+            body: const {'detail': 'The invitation has expired.'},
+          ),
+        );
+
+        final failure = (await repository.joinInvitation(
+          token: 'abc',
+        )).getLeft().toNullable();
+
+        expect(failure, isA<SpaceValidationFailure>());
+        expect(failure?.message, 'The invitation has expired.');
+      },
+    );
+
+    test('400 without detail falls back to the invitation message', () async {
+      final repository = _buildRepository(
+        _JsonResponseAdapter(statusCode: 400, body: const {}),
+      );
+
+      final failure = (await repository.joinInvitation(
+        token: 'abc',
+      )).getLeft().toNullable();
+
+      expect(failure, isA<SpaceValidationFailure>());
+      expect(failure?.message, 'This invitation is invalid or has expired.');
+    });
+
+    final sharedCases = <(int, TypeMatcher<SpaceFailure>, String)>[
+      (
+        401,
+        isA<SpaceUnauthorizedFailure>(),
+        'Your session has expired. Please log in again.',
+      ),
+      (
+        403,
+        isA<SpaceForbiddenFailure>(),
+        'You are not allowed to perform this action.',
+      ),
+      (
+        500,
+        isA<SpaceServerFailure>(),
+        'Something went wrong. Please try again.',
+      ),
+    ];
+
+    for (final (status, matcher, fallback) in sharedCases) {
+      test(
+        '$status keeps the shared mapping, with and without detail',
+        () async {
+          final withDetail = (await _buildRepository(
+            _JsonResponseAdapter(
+              statusCode: status,
+              body: const {'detail': 'x'},
+            ),
+          ).joinInvitation(token: 'abc')).getLeft().toNullable();
+          final withoutDetail = (await _buildRepository(
+            _JsonResponseAdapter(statusCode: status, body: const {}),
+          ).joinInvitation(token: 'abc')).getLeft().toNullable();
+
+          expect(withDetail, matcher);
+          expect(withDetail?.message, 'x');
+          expect(withoutDetail, matcher);
+          expect(withoutDetail?.message, fallback);
+        },
+      );
+    }
+
+    test('connection error maps to SpaceNetworkFailure', () async {
+      final repository = _buildRepository(_ConnectionErrorAdapter());
+
+      final result = await repository.joinInvitation(token: 'abc');
+
+      expect(result.getLeft().toNullable(), isA<SpaceNetworkFailure>());
+    });
+  });
 }

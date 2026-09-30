@@ -79,6 +79,11 @@ class _StubSpaceRepository implements SpaceRepository {
       Right(spaces);
 
   @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
     required String spaceId,
   }) => throw UnimplementedError();

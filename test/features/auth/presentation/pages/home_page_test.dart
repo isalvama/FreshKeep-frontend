@@ -38,6 +38,11 @@ class _PendingSpaceRepository implements SpaceRepository {
   Future<Either<SpaceFailure, List<Space>>> getUserSpaces() => completer.future;
 
   @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
     required String spaceId,
   }) => throw UnimplementedError();
@@ -65,6 +70,11 @@ class _SequencedSpaceRepository implements SpaceRepository {
   }
 
   @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
   Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
     required String spaceId,
   }) => throw UnimplementedError();
@@ -88,6 +98,11 @@ class _ScriptedSpaceRepository implements SpaceRepository {
     calls.add(completer);
     return completer.future;
   }
+
+  @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
 
   @override
   Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
