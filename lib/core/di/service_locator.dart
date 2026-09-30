@@ -29,6 +29,7 @@ import '../../features/spaces/domain/usecases/create_space_invitation_usecase.da
 import '../../features/spaces/domain/usecases/create_space_usecase.dart';
 import '../../features/spaces/domain/usecases/get_user_spaces_usecase.dart';
 import '../../features/spaces/presentation/bloc/create_space_bloc.dart';
+import '../../features/spaces/presentation/bloc/space_invitation_bloc.dart';
 import '../../features/spaces/presentation/bloc/spaces_bloc.dart';
 
 final getIt = GetIt.instance;
@@ -48,6 +49,9 @@ void setupServiceLocator({required Dio dio}) {
   );
   getIt.registerLazySingleton(
     () => CreateSpaceBloc(createSpaceUseCase: getIt()),
+  );
+  getIt.registerFactory(
+    () => SpaceInvitationBloc(createSpaceInvitationUseCase: getIt()),
   );
 
   getIt.registerLazySingleton<ShoppingReceiptRemoteDataSource>(
