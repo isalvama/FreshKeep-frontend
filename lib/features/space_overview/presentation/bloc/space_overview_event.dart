@@ -31,3 +31,10 @@ final class ProductUpdated extends SpaceOverviewEvent {
 
   const ProductUpdated(this.product);
 }
+
+/// Moves the single selected product to [destination]'s storage spot.
+final class SelectedProductMoveSubmitted extends SpaceOverviewEvent {
+  final MoveDestination destination;
+
+  const SelectedProductMoveSubmitted(this.destination);
+}

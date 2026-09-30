@@ -15,6 +15,7 @@ import 'package:fresh_keep_frontend/features/products/domain/entities/updated_pr
 import 'package:fresh_keep_frontend/features/products/domain/repositories/product_repository.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_product_usecase.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_products_usecase.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/move_product_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_product.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/entities/space_overview.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/repositories/space_overview_repository.dart';
@@ -214,6 +215,7 @@ SpaceOverviewBloc _buildBloc(
     getSpaceOverviewUseCase: GetSpaceOverviewUseCase(repository),
     deleteProductUseCase: DeleteProductUseCase(products),
     deleteProductsUseCase: DeleteProductsUseCase(products),
+    moveProductUseCase: MoveProductUseCase(products),
   );
 }
 

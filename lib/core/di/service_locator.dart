@@ -77,6 +77,7 @@ void setupServiceLocator({required Dio dio}) {
       getSpaceOverviewUseCase: getIt(),
       deleteProductUseCase: getIt(),
       deleteProductsUseCase: getIt(),
+      moveProductUseCase: getIt(),
     ),
   );
 

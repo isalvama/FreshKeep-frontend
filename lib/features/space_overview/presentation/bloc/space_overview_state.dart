@@ -48,17 +48,47 @@ final class ProductDeletionFailure extends ProductDeletionStatus {
   const ProductDeletionFailure(this.message);
 }
 
+sealed class ProductMoveStatus {
+  const ProductMoveStatus();
+}
+
+final class ProductMoveIdle extends ProductMoveStatus {
+  const ProductMoveIdle();
+}
+
+final class ProductMoveInProgress extends ProductMoveStatus {
+  const ProductMoveInProgress();
+}
+
+final class ProductMoveSuccess extends ProductMoveStatus {
+  final MoveDestination destination;
+  final DateTime newExpirationDate;
+
+  const ProductMoveSuccess({
+    required this.destination,
+    required this.newExpirationDate,
+  });
+}
+
+final class ProductMoveFailure extends ProductMoveStatus {
+  final String message;
+
+  const ProductMoveFailure(this.message);
+}
+
 class SpaceOverviewState extends Equatable {
   final SpaceOverviewStatus status;
 
   /// Empty when not in selection mode.
   final Set<String> selectedProductIds;
   final ProductDeletionStatus deletionStatus;
+  final ProductMoveStatus moveStatus;
 
   const SpaceOverviewState({
     required this.status,
     this.selectedProductIds = const {},
     this.deletionStatus = const ProductDeletionIdle(),
+    this.moveStatus = const ProductMoveIdle(),
   });
 
   factory SpaceOverviewState.initial() {
@@ -67,18 +97,30 @@ class SpaceOverviewState extends Equatable {
 
   bool get isSelecting => selectedProductIds.isNotEmpty;
 
+  /// A deletion or a move is running; selection and other actions wait.
+  bool get isBusy =>
+      deletionStatus is ProductDeletionInProgress ||
+      moveStatus is ProductMoveInProgress;
+
   SpaceOverviewState copyWith({
     SpaceOverviewStatus? status,
     Set<String>? selectedProductIds,
     ProductDeletionStatus? deletionStatus,
+    ProductMoveStatus? moveStatus,
   }) {
     return SpaceOverviewState(
       status: status ?? this.status,
       selectedProductIds: selectedProductIds ?? this.selectedProductIds,
       deletionStatus: deletionStatus ?? this.deletionStatus,
+      moveStatus: moveStatus ?? this.moveStatus,
     );
   }
 
   @override
-  List<Object?> get props => [status, selectedProductIds, deletionStatus];
+  List<Object?> get props => [
+    status,
+    selectedProductIds,
+    deletionStatus,
+    moveStatus,
+  ];
 }
