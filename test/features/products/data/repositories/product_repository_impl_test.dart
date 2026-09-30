@@ -1,0 +1,183 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fpdart/fpdart.dart';
+import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/data/datasources/product_remote_datasource.dart';
+import 'package:fresh_keep_frontend/features/products/data/repositories/product_repository_impl.dart';
+
+/// Replies with [statusCode] (and [body] as JSON, if any) and records every
+/// request it receives.
+class _RecordingAdapter implements HttpClientAdapter {
+  _RecordingAdapter({required this.statusCode, this.body});
+
+  final int statusCode;
+  final dynamic body;
+  final List<RequestOptions> requests = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    if (body == null) {
+      return ResponseBody.fromBytes(const [], statusCode);
+    }
+    return ResponseBody.fromBytes(
+      utf8.encode(jsonEncode(body)),
+      statusCode,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _ConnectionErrorAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    throw DioException.connectionError(
+      requestOptions: options,
+      reason: 'Failed host lookup',
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+ProductRepositoryImpl _buildRepository(HttpClientAdapter adapter) {
+  final dio = Dio()..httpClientAdapter = adapter;
+  return ProductRepositoryImpl(remoteDataSource: ProductRemoteDataSource(dio));
+}
+
+void main() {
+  group('ProductRepositoryImpl.deleteProduct', () {
+    test(
+      'sends DELETE /api/v1/products/<id> and maps 204 to Right(unit)',
+      () async {
+        final adapter = _RecordingAdapter(statusCode: 204);
+        final repository = _buildRepository(adapter);
+
+        final result = await repository.deleteProduct(productId: 'product-1');
+
+        expect(result, const Right<ProductFailure, Unit>(unit));
+        expect(adapter.requests, hasLength(1));
+        expect(adapter.requests.single.method, 'DELETE');
+        expect(adapter.requests.single.path, '/api/v1/products/product-1');
+      },
+    );
+  });
+
+  group('ProductRepositoryImpl.deleteProducts', () {
+    test('sends DELETE /api/v1/products with productsIds and maps 204 to '
+        'Right(unit)', () async {
+      final adapter = _RecordingAdapter(statusCode: 204);
+      final repository = _buildRepository(adapter);
+
+      final result = await repository.deleteProducts(
+        productIds: ['product-1', 'product-2'],
+      );
+
+      expect(result, const Right<ProductFailure, Unit>(unit));
+      expect(adapter.requests, hasLength(1));
+      final request = adapter.requests.single;
+      expect(request.method, 'DELETE');
+      expect(request.path, '/api/v1/products');
+      expect(request.data, {
+        'productsIds': ['product-1', 'product-2'],
+      });
+    });
+  });
+
+  group('ProductRepositoryImpl status-code-to-failure mapping', () {
+    // Each case runs against both endpoints: they share the same mapping.
+    final cases = <int, (TypeMatcher<ProductFailure>, String)>{
+      400: (
+        isA<ProductValidationFailure>(),
+        'Some of these products no longer exist.',
+      ),
+      401: (
+        isA<ProductUnauthorizedFailure>(),
+        'Your session has expired. Please log in again.',
+      ),
+      403: (
+        isA<ProductForbiddenFailure>(),
+        'You are not allowed to perform this action.',
+      ),
+      409: (
+        isA<ProductConflictFailure>(),
+        'You are not a participant of this space.',
+      ),
+    };
+
+    final calls =
+        <
+          String,
+          Future<Either<ProductFailure, Unit>> Function(ProductRepositoryImpl)
+        >{
+          'deleteProduct': (r) => r.deleteProduct(productId: 'product-1'),
+          'deleteProducts': (r) =>
+              r.deleteProducts(productIds: ['product-1', 'product-2']),
+        };
+
+    for (final call in calls.entries) {
+      for (final entry in cases.entries) {
+        final status = entry.key;
+        final (matcher, defaultMessage) = entry.value;
+
+        test('${call.key}: $status uses the backend detail', () async {
+          final repository = _buildRepository(
+            _RecordingAdapter(
+              statusCode: status,
+              body: {'detail': 'backend says $status'},
+            ),
+          );
+
+          final failure = (await call.value(repository)).getLeft().toNullable();
+
+          expect(failure, matcher);
+          expect(failure!.message, 'backend says $status');
+        });
+
+        test(
+          '${call.key}: $status without detail uses the default message',
+          () async {
+            final repository = _buildRepository(
+              _RecordingAdapter(statusCode: status, body: <String, dynamic>{}),
+            );
+
+            final failure = (await call.value(
+              repository,
+            )).getLeft().toNullable();
+
+            expect(failure, matcher);
+            expect(failure!.message, defaultMessage);
+          },
+        );
+      }
+
+      test(
+        '${call.key}: connection error maps to ProductNetworkFailure',
+        () async {
+          final repository = _buildRepository(_ConnectionErrorAdapter());
+
+          final failure = (await call.value(repository)).getLeft().toNullable();
+
+          expect(failure, isA<ProductNetworkFailure>());
+        },
+      );
+    }
+  });
+}

@@ -117,3 +117,29 @@ class SpaceOverviewConflictFailure extends SpaceOverviewFailure {
 class SpaceOverviewNetworkFailure extends SpaceOverviewFailure {
   const SpaceOverviewNetworkFailure(super.message); // no connectivity / timeout
 }
+
+sealed class ProductFailure {
+  final String message;
+
+  const ProductFailure(this.message);
+}
+
+class ProductValidationFailure extends ProductFailure {
+  const ProductValidationFailure(super.message); // 400 — missing product
+}
+
+class ProductUnauthorizedFailure extends ProductFailure {
+  const ProductUnauthorizedFailure(super.message); // 401
+}
+
+class ProductForbiddenFailure extends ProductFailure {
+  const ProductForbiddenFailure(super.message); // 403
+}
+
+class ProductConflictFailure extends ProductFailure {
+  const ProductConflictFailure(super.message); // 409 — not a participant
+}
+
+class ProductNetworkFailure extends ProductFailure {
+  const ProductNetworkFailure(super.message); // no connectivity / timeout
+}
