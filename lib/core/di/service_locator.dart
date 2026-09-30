@@ -33,6 +33,7 @@ import '../../features/spaces/presentation/bloc/create_space_bloc.dart';
 import '../../features/spaces/presentation/bloc/join_space_bloc.dart';
 import '../../features/spaces/presentation/bloc/space_invitation_bloc.dart';
 import '../../features/spaces/presentation/bloc/spaces_bloc.dart';
+import '../deep_links/pending_invitation_store.dart';
 
 final getIt = GetIt.instance;
 
@@ -59,6 +60,7 @@ void setupServiceLocator({required Dio dio}) {
   getIt.registerFactory(
     () => JoinSpaceBloc(joinSpaceInvitationUseCase: getIt()),
   );
+  getIt.registerLazySingleton(() => PendingInvitationStore());
 
   getIt.registerLazySingleton<ShoppingReceiptRemoteDataSource>(
     () => ShoppingReceiptRemoteDataSource(dio),

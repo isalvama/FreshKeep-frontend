@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/deep_links/pending_invitation_store.dart';
 import '../core/di/service_locator.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
 import '../features/auth/presentation/pages/home_page.dart';
@@ -43,7 +44,10 @@ class GoRouterRefreshStream extends ChangeNotifier {
   }
 }
 
-GoRouter buildAppRouter(AuthBloc authBloc) {
+GoRouter buildAppRouter(
+  AuthBloc authBloc, {
+  required PendingInvitationStore pendingInvitations,
+}) {
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: GoRouterRefreshStream(authBloc.stream),
@@ -120,21 +124,37 @@ GoRouter buildAppRouter(AuthBloc authBloc) {
       ),
     ],
     redirect: (context, state) {
-      final authState = authBloc.state;
       final location = state.matchedLocation;
+      final target = _authRedirect(authBloc.state, location);
 
-      if (authState is AuthInitial) {
-        return location == '/splash' ? null : '/splash';
+      // An invitation link opened before logging in waits for the login.
+      if (location == '/join' && target != null) {
+        pendingInvitations.save(state.uri.queryParameters['token'] ?? '');
       }
 
-      final loggedIn = authState is Authenticated;
-      final isAuthRoute = location == '/login' || location == '/register';
-
-      if (!loggedIn) {
-        return isAuthRoute ? null : '/login';
+      if (target == '/home') {
+        final token = pendingInvitations.take();
+        if (token != null) {
+          return '/join?token=${Uri.encodeQueryComponent(token)}';
+        }
       }
 
-      return (isAuthRoute || location == '/splash') ? '/home' : null;
+      return target;
     },
   );
+}
+
+String? _authRedirect(AuthState authState, String location) {
+  if (authState is AuthInitial) {
+    return location == '/splash' ? null : '/splash';
+  }
+
+  final loggedIn = authState is Authenticated;
+  final isAuthRoute = location == '/login' || location == '/register';
+
+  if (!loggedIn) {
+    return isAuthRoute ? null : '/login';
+  }
+
+  return (isAuthRoute || location == '/splash') ? '/home' : null;
 }

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'core/config/env.dart';
+import 'core/deep_links/pending_invitation_store.dart';
 import 'core/di/service_locator.dart';
 import 'core/network/dio_client.dart';
 import 'features/auth/data/datasources/auth_local_datasource.dart';
@@ -64,17 +65,44 @@ class App extends StatelessWidget {
           value: getIt<ShoppingReceiptBloc>(),
         ),
       ],
-      child: BlocListener<AuthBloc, AuthState>(
-        listenWhen: (previous, current) =>
-            previous is! Authenticated && current is Authenticated,
-        listener: (context, state) {
-          context.read<SpacesBloc>().add(const SpacesRequested());
-        },
+      child: AuthSessionListener(
+        pendingInvitations: getIt<PendingInvitationStore>(),
         child: MaterialApp.router(
-          routerConfig: buildAppRouter(authBloc),
+          routerConfig: buildAppRouter(
+            authBloc,
+            pendingInvitations: getIt<PendingInvitationStore>(),
+          ),
           theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
         ),
       ),
+    );
+  }
+}
+
+/// Loads the spaces on login, and drops a pending invitation on logout.
+class AuthSessionListener extends StatelessWidget {
+  final PendingInvitationStore pendingInvitations;
+  final Widget child;
+
+  const AuthSessionListener({
+    super.key,
+    required this.pendingInvitations,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (previous, current) =>
+          (previous is Authenticated) != (current is Authenticated),
+      listener: (context, state) {
+        if (state is Authenticated) {
+          context.read<SpacesBloc>().add(const SpacesRequested());
+        } else {
+          pendingInvitations.clear();
+        }
+      },
+      child: child,
     );
   }
 }
