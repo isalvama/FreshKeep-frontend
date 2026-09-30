@@ -1,6 +1,6 @@
 # SPEC 10 — Edit a product from a space's overview
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 06 (confirm-reprocess-and-space-overview) — extends `SpaceOverviewBloc` and `SpaceOverviewPage`; SPEC 09 (delete-products-from-overview) — reuses `lib/features/products/`, `ProductRepository`, `ProductRemoteDataSource` and `ProductFailure`, and makes a tap outside selection mode open the editor. Uses the backend Product API: `PATCH /api/v1/products/{id}` (`api_contract.md`, "Product API Contract" §1).
 > **Date:** 2026-09-30
 > **Objective:** From a space's overview, the user can tap a product to open an edit page, change its name, expiration date, type, price amount and/or currency, and save only the changed fields to the backend, with the overview updated locally on success.

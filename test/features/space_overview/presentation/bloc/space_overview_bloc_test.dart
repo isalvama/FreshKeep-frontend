@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/moved_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/repositories/product_repository.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_product_usecase.dart';
 import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_products_usecase.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/move_product_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_product.dart';
+import 'package:fresh_keep_frontend/features/space_overview/domain/entities/move_destination.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/entities/space_overview.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/repositories/space_overview_repository.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/usecases/get_space_overview_usecase.dart';
@@ -78,6 +81,21 @@ class _RecordingProductRepository implements ProductRepository {
     required String productId,
     required ProductChanges changes,
   }) => throw UnimplementedError();
+
+  /// Answers moves with [moveResult], or waits on [movePending] when set.
+  Either<ProductFailure, MovedProduct>? moveResult;
+  Completer<Either<ProductFailure, MovedProduct>>? movePending;
+  final List<(String, String, String)> moveCalls = [];
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) async {
+    moveCalls.add((productId, oldStorageSpotId, newStorageSpotId));
+    return movePending != null ? movePending!.future : moveResult!;
+  }
 }
 
 PersistedProduct _product(String id) => PersistedProduct(
@@ -109,6 +127,7 @@ SpaceOverviewBloc _buildBloc(
     ),
     deleteProductUseCase: DeleteProductUseCase(products),
     deleteProductsUseCase: DeleteProductsUseCase(products),
+    moveProductUseCase: MoveProductUseCase(products),
   );
 }
 
@@ -553,6 +572,7 @@ void main() {
         getSpaceOverviewUseCase: GetSpaceOverviewUseCase(pending),
         deleteProductUseCase: DeleteProductUseCase(productRepository),
         deleteProductsUseCase: DeleteProductsUseCase(productRepository),
+        moveProductUseCase: MoveProductUseCase(productRepository),
       );
       loading.add(const SpaceOverviewRequested('space-1'));
       await _settle();
@@ -579,6 +599,281 @@ void main() {
       expect(failedEmitted, isEmpty);
       await failedSubscription.cancel();
       await failed.close();
+    });
+  });
+
+  group('SelectedProductMoveSubmitted', () {
+    PersistedProduct product(String id, String? spotId, DateTime date) =>
+        PersistedProduct(
+          id: id,
+          productName: 'Product $id',
+          expirationDate: date,
+          storageSpotId: spotId,
+          productType: 'OTHER',
+          priceAmount: null,
+          currency: null,
+        );
+
+    // m1 and m2 in spot-a, m3 in spot-b, m4 without a spot.
+    final overview = SpaceOverview(
+      id: 'space-1',
+      name: 'Kitchen',
+      emoji: '🏠',
+      storageSpots: const [],
+      productResults: [
+        product('m1', 'spot-a', DateTime(2026, 10, 1)),
+        product('m2', 'spot-a', DateTime(2026, 10, 5)),
+        product('m3', 'spot-b', DateTime(2026, 10, 10)),
+        product('m4', null, DateTime(2026, 10, 20)),
+      ],
+    );
+
+    const toSpotB = MoveDestination(
+      spaceId: 'space-1',
+      spaceName: 'Kitchen',
+      storageSpotId: 'spot-b',
+      storageSpotName: 'Fridge',
+    );
+    const toOtherSpace = MoveDestination(
+      spaceId: 'space-2',
+      spaceName: 'Garage',
+      storageSpotId: 'spot-x',
+      storageSpotName: 'Freezer',
+    );
+
+    MovedProduct moved(String id, String spotId, DateTime date) => MovedProduct(
+      productId: id,
+      newStorageSpotId: spotId,
+      newExpirationDate: date,
+    );
+
+    Future<SpaceOverviewBloc> loaded(
+      _RecordingProductRepository products, {
+      List<String> select = const ['m1'],
+    }) async {
+      final bloc = _buildBloc(Right(overview), productRepository: products);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await bloc.stream.firstWhere((s) => s.status is SpaceOverviewLoadSuccess);
+      for (final id in select) {
+        bloc.add(ProductSelectionToggled(id));
+      }
+      await _settle();
+      return bloc;
+    }
+
+    List<PersistedProduct> productsOf(SpaceOverviewState state) =>
+        (state.status as SpaceOverviewLoadSuccess).overview.productResults;
+
+    test('within the same space, calls the use case with the current spot, '
+        'updates spot and date, re-sorts and leaves selection mode', () async {
+      final products = _RecordingProductRepository()
+        ..moveResult = Right(moved('m1', 'spot-b', DateTime(2026, 10, 10)));
+      final bloc = await loaded(products);
+      final emitted = <SpaceOverviewState>[];
+      final subscription = bloc.stream.listen(emitted.add);
+
+      bloc.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+
+      expect(products.moveCalls, [('m1', 'spot-a', 'spot-b')]);
+      expect(emitted.first.moveStatus, isA<ProductMoveInProgress>());
+      expect(emitted.first.isBusy, isTrue);
+
+      final result = bloc.state;
+      // m1 now shares m3's date and keeps its earlier position.
+      expect(productsOf(result).map((p) => p.id), ['m2', 'm1', 'm3', 'm4']);
+      final m1 = productsOf(result).firstWhere((p) => p.id == 'm1');
+      expect(m1.storageSpotId, 'spot-b');
+      expect(m1.expirationDate, DateTime(2026, 10, 10));
+      expect(m1.productName, 'Product m1');
+      expect(result.selectedProductIds, isEmpty);
+      final status = result.moveStatus as ProductMoveSuccess;
+      expect(status.destination, toSpotB);
+      expect(status.newExpirationDate, DateTime(2026, 10, 10));
+      expect(result.isBusy, isFalse);
+
+      await subscription.cancel();
+      await bloc.close();
+    });
+
+    test('to another space, removes the product and leaves selection '
+        'mode', () async {
+      final products = _RecordingProductRepository()
+        ..moveResult = Right(moved('m2', 'spot-x', DateTime(2026, 9, 18)));
+      final bloc = await loaded(products, select: ['m2']);
+
+      bloc.add(const SelectedProductMoveSubmitted(toOtherSpace));
+      await _settle();
+
+      expect(products.moveCalls, [('m2', 'spot-a', 'spot-x')]);
+      expect(productsOf(bloc.state).map((p) => p.id), ['m1', 'm3', 'm4']);
+      expect(bloc.state.selectedProductIds, isEmpty);
+      final status = bloc.state.moveStatus as ProductMoveSuccess;
+      expect(status.destination, toOtherSpace);
+      expect(status.newExpirationDate, DateTime(2026, 9, 18));
+
+      await bloc.close();
+    });
+
+    test('on failure keeps the list and the selection and emits '
+        'ProductMoveFailure; submitting again retries', () async {
+      final products = _RecordingProductRepository()
+        ..moveResult = const Left(ProductServerFailure('Server down.'));
+      final bloc = await loaded(products);
+
+      bloc.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+
+      expect(productsOf(bloc.state), overview.productResults);
+      expect(bloc.state.selectedProductIds, {'m1'});
+      expect(
+        (bloc.state.moveStatus as ProductMoveFailure).message,
+        'Server down.',
+      );
+
+      products.moveResult = Right(moved('m1', 'spot-b', DateTime(2026, 10, 2)));
+      bloc.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+
+      expect(products.moveCalls, hasLength(2));
+      expect(bloc.state.moveStatus, isA<ProductMoveSuccess>());
+
+      await bloc.close();
+    });
+
+    test('is ignored unless exactly one product is selected', () async {
+      final products = _RecordingProductRepository()
+        ..moveResult = Right(moved('m1', 'spot-b', DateTime(2026, 10, 1)));
+      final none = await loaded(products, select: []);
+      none.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+      expect(none.state.moveStatus, isA<ProductMoveIdle>());
+      await none.close();
+
+      final two = await loaded(products, select: ['m1', 'm2']);
+      two.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+      expect(two.state.moveStatus, isA<ProductMoveIdle>());
+      await two.close();
+
+      expect(products.moveCalls, isEmpty);
+    });
+
+    test('is ignored for a product without a storage spot and for its '
+        'current spot', () async {
+      final products = _RecordingProductRepository()
+        ..moveResult = Right(moved('m1', 'spot-b', DateTime(2026, 10, 1)));
+      final noSpot = await loaded(products, select: ['m4']);
+      noSpot.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+      expect(noSpot.state.moveStatus, isA<ProductMoveIdle>());
+      await noSpot.close();
+
+      final sameSpot = await loaded(products, select: ['m3']);
+      sameSpot.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+      expect(sameSpot.state.moveStatus, isA<ProductMoveIdle>());
+      expect(sameSpot.state.selectedProductIds, {'m3'});
+      await sameSpot.close();
+
+      expect(products.moveCalls, isEmpty);
+    });
+
+    test('is ignored while loading and after a load failure', () async {
+      final pending = _PendingSpaceOverviewRepository();
+      final productRepository = _RecordingProductRepository();
+      final loading = SpaceOverviewBloc(
+        getSpaceOverviewUseCase: GetSpaceOverviewUseCase(pending),
+        deleteProductUseCase: DeleteProductUseCase(productRepository),
+        deleteProductsUseCase: DeleteProductsUseCase(productRepository),
+        moveProductUseCase: MoveProductUseCase(productRepository),
+      );
+      loading.add(const SpaceOverviewRequested('space-1'));
+      await _settle();
+      loading.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+      expect(loading.state.moveStatus, isA<ProductMoveIdle>());
+      await loading.close();
+
+      final failed = _buildBloc(
+        const Left(SpaceOverviewConflictFailure('Not a participant.')),
+        productRepository: productRepository,
+      );
+      failed.add(const SpaceOverviewRequested('space-1'));
+      await failed.stream.firstWhere(
+        (s) => s.status is SpaceOverviewLoadFailure,
+      );
+      failed.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+      expect(failed.state.moveStatus, isA<ProductMoveIdle>());
+      await failed.close();
+
+      expect(productRepository.moveCalls, isEmpty);
+    });
+
+    test('a second submit, toggle, clear and delete are ignored while '
+        'moving', () async {
+      final products = _RecordingProductRepository()..movePending = Completer();
+      final bloc = await loaded(products);
+
+      bloc.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+      expect(bloc.state.moveStatus, isA<ProductMoveInProgress>());
+
+      bloc
+        ..add(const SelectedProductMoveSubmitted(toOtherSpace))
+        ..add(const ProductSelectionToggled('m2'))
+        ..add(const ProductSelectionCleared())
+        ..add(const SelectedProductsDeleteSubmitted());
+      await _settle();
+
+      expect(products.moveCalls, hasLength(1));
+      expect(products.singleCalls, isEmpty);
+      expect(products.batchCalls, isEmpty);
+      expect(bloc.state.selectedProductIds, {'m1'});
+
+      products.movePending!.complete(
+        Right(moved('m1', 'spot-b', DateTime(2026, 10, 1))),
+      );
+      await _settle();
+      expect(bloc.state.moveStatus, isA<ProductMoveSuccess>());
+
+      await bloc.close();
+    });
+
+    test('is ignored while a deletion is in progress', () async {
+      final products = _RecordingProductRepository()..pending = Completer();
+      final bloc = await loaded(products);
+
+      bloc.add(const SelectedProductsDeleteSubmitted());
+      await _settle();
+      expect(bloc.state.isBusy, isTrue);
+
+      bloc.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+
+      expect(products.moveCalls, isEmpty);
+      expect(bloc.state.moveStatus, isA<ProductMoveIdle>());
+
+      products.pending!.complete(const Right(unit));
+      await _settle();
+      await bloc.close();
+    });
+
+    test('SpaceOverviewRequested resets the move status to idle', () async {
+      final products = _RecordingProductRepository()
+        ..moveResult = const Left(ProductServerFailure('Server down.'));
+      final bloc = await loaded(products);
+
+      bloc.add(const SelectedProductMoveSubmitted(toSpotB));
+      await _settle();
+      expect(bloc.state.moveStatus, isA<ProductMoveFailure>());
+
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await _settle();
+      expect(bloc.state.moveStatus, isA<ProductMoveIdle>());
+
+      await bloc.close();
     });
   });
 }

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
 
 import '../../../../core/errors/failures.dart';
+import '../../domain/entities/moved_product.dart';
 import '../../domain/entities/product_changes.dart';
 import '../../domain/entities/updated_product.dart';
 import '../../domain/repositories/product_repository.dart';
@@ -52,10 +53,30 @@ class ProductRepositoryImpl implements ProductRepository {
     }
   }
 
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) async {
+    try {
+      final model = await remoteDataSource.moveProduct(
+        productId: productId,
+        oldStorageSpotId: oldStorageSpotId,
+        newStorageSpotId: newStorageSpotId,
+      );
+      return Right(model.toEntity());
+    } on DioException catch (e) {
+      return Left(_mapDioException(e, _moveValidationMessage));
+    }
+  }
+
   static const _deleteValidationMessage =
       'Some of these products no longer exist.';
   static const _updateValidationMessage =
       "This product couldn't be updated. Check the values and try again.";
+  static const _moveValidationMessage =
+      "This product couldn't be moved. Try again.";
 
   /// [validationMessage] is the default for a 400 without `detail`.
   ProductFailure _mapDioException(DioException e, String validationMessage) {
@@ -77,6 +98,10 @@ class ProductRepositoryImpl implements ProductRepository {
       case 409:
         return ProductConflictFailure(
           detail ?? 'You are not a participant of this space.',
+        );
+      case 500:
+        return ProductServerFailure(
+          detail ?? 'Something went wrong on the server. Try again later.',
         );
       default:
         return ProductNetworkFailure(

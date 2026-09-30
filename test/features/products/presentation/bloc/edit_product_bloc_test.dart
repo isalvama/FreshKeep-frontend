@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/currency.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/moved_product.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/product_type.dart';
 import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
@@ -38,6 +39,13 @@ class _RecordingProductRepository implements ProductRepository {
   @override
   Future<Either<ProductFailure, Unit>> deleteProducts({
     required List<String> productIds,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
   }) => throw UnimplementedError();
 }
 

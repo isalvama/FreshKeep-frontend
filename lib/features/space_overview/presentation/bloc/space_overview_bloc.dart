@@ -1,10 +1,13 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../products/domain/entities/moved_product.dart';
 import '../../../products/domain/entities/updated_product.dart';
 import '../../../products/domain/usecases/delete_product_usecase.dart';
 import '../../../products/domain/usecases/delete_products_usecase.dart';
+import '../../../products/domain/usecases/move_product_usecase.dart';
 import '../../../shopping_receipt/domain/entities/persisted_product.dart';
+import '../../domain/entities/move_destination.dart';
 import '../../domain/entities/space_overview.dart';
 import '../../domain/usecases/get_space_overview_usecase.dart';
 
@@ -15,20 +18,21 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
   final GetSpaceOverviewUseCase getSpaceOverviewUseCase;
   final DeleteProductUseCase deleteProductUseCase;
   final DeleteProductsUseCase deleteProductsUseCase;
+  final MoveProductUseCase moveProductUseCase;
 
   SpaceOverviewBloc({
     required this.getSpaceOverviewUseCase,
     required this.deleteProductUseCase,
     required this.deleteProductsUseCase,
+    required this.moveProductUseCase,
   }) : super(SpaceOverviewState.initial()) {
     on<SpaceOverviewRequested>(_onRequested);
     on<ProductSelectionToggled>(_onSelectionToggled);
     on<ProductSelectionCleared>(_onSelectionCleared);
     on<SelectedProductsDeleteSubmitted>(_onDeleteSubmitted);
     on<ProductUpdated>(_onProductUpdated);
+    on<SelectedProductMoveSubmitted>(_onMoveSubmitted);
   }
-
-  bool get _isDeleting => state.deletionStatus is ProductDeletionInProgress;
 
   Future<void> _onRequested(
     SpaceOverviewRequested event,
@@ -39,6 +43,7 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
         status: const SpaceOverviewLoading(),
         selectedProductIds: const {},
         deletionStatus: const ProductDeletionIdle(),
+        moveStatus: const ProductMoveIdle(),
       ),
     );
 
@@ -57,7 +62,7 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     ProductSelectionToggled event,
     Emitter<SpaceOverviewState> emit,
   ) {
-    if (_isDeleting) return;
+    if (state.isBusy) return;
 
     final selected = {...state.selectedProductIds};
     if (!selected.remove(event.productId)) selected.add(event.productId);
@@ -68,7 +73,7 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     ProductSelectionCleared event,
     Emitter<SpaceOverviewState> emit,
   ) {
-    if (_isDeleting) return;
+    if (state.isBusy) return;
 
     emit(state.copyWith(selectedProductIds: const {}));
   }
@@ -80,7 +85,7 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     SelectedProductsDeleteSubmitted event,
     Emitter<SpaceOverviewState> emit,
   ) async {
-    if (_isDeleting || !state.isSelecting) return;
+    if (state.isBusy || !state.isSelecting) return;
 
     final ids = state.selectedProductIds.toList();
     emit(state.copyWith(deletionStatus: const ProductDeletionInProgress()));
@@ -151,6 +156,88 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Moves exactly one selected product that has a storage spot. On success
+  /// the list is updated locally: within this space the product takes the
+  /// new spot and date and the list is re-sorted; to another space it is
+  /// removed.
+  Future<void> _onMoveSubmitted(
+    SelectedProductMoveSubmitted event,
+    Emitter<SpaceOverviewState> emit,
+  ) async {
+    final status = state.status;
+    if (status is! SpaceOverviewLoadSuccess || state.isBusy) return;
+    if (state.selectedProductIds.length != 1) return;
+
+    final productId = state.selectedProductIds.single;
+    final product = status.overview.productResults
+        .where((p) => p.id == productId)
+        .firstOrNull;
+    final oldStorageSpotId = product?.storageSpotId;
+    final destination = event.destination;
+    if (oldStorageSpotId == null ||
+        oldStorageSpotId == destination.storageSpotId) {
+      return;
+    }
+
+    emit(state.copyWith(moveStatus: const ProductMoveInProgress()));
+
+    final result = await moveProductUseCase(
+      productId: productId,
+      oldStorageSpotId: oldStorageSpotId,
+      newStorageSpotId: destination.storageSpotId,
+    );
+
+    if (isClosed) return;
+
+    result.match(
+      (failure) =>
+          emit(state.copyWith(moveStatus: ProductMoveFailure(failure.message))),
+      (moved) {
+        final current = state.status;
+        emit(
+          state.copyWith(
+            status: current is SpaceOverviewLoadSuccess
+                ? SpaceOverviewLoadSuccess(
+                    destination.spaceId == current.overview.id
+                        ? _withMovedProduct(current.overview, moved)
+                        : _withoutProducts(current.overview, [productId]),
+                  )
+                : current,
+            selectedProductIds: const {},
+            moveStatus: ProductMoveSuccess(
+              destination: destination,
+              newExpirationDate: moved.newExpirationDate,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  SpaceOverview _withMovedProduct(SpaceOverview overview, MovedProduct moved) {
+    final products = [
+      for (final product in overview.productResults)
+        product.id == moved.productId
+            ? PersistedProduct(
+                id: product.id,
+                productName: product.productName,
+                expirationDate: moved.newExpirationDate,
+                storageSpotId: moved.newStorageSpotId,
+                productType: product.productType,
+                priceAmount: product.priceAmount,
+                currency: product.currency,
+              )
+            : product,
+    ];
+    return SpaceOverview(
+      id: overview.id,
+      name: overview.name,
+      emoji: overview.emoji,
+      storageSpots: overview.storageSpots,
+      productResults: _sortedByExpiration(products),
     );
   }
 
