@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../products/domain/entities/updated_product.dart';
 import '../../../shopping_receipt/domain/entities/persisted_product.dart';
 import '../../../spaces/domain/entities/space.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
@@ -88,6 +89,7 @@ class SpaceOverviewPage extends StatelessWidget {
                             isSelected: state.selectedProductIds.contains(
                               product.id,
                             ),
+                            onOpen: () => _openEditor(context, product),
                           ),
                       ],
                     ),
@@ -177,6 +179,23 @@ class SpaceOverviewPage extends StatelessWidget {
     );
   }
 
+  /// The editor pops with the saved product, or with nothing when the user
+  /// leaves without saving.
+  Future<void> _openEditor(
+    BuildContext context,
+    PersistedProduct product,
+  ) async {
+    final updated = await context.push<UpdatedProduct>(
+      '/space-overview/$spaceId/products/${product.id}/edit',
+      extra: product,
+    );
+    if (updated == null || !context.mounted) return;
+    context.read<SpaceOverviewBloc>().add(ProductUpdated(updated));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Product updated')));
+  }
+
   void _showDeletionFeedback(BuildContext context, SpaceOverviewState state) {
     final message = switch (state.deletionStatus) {
       ProductDeletionSuccess(:final deletedCount) =>
@@ -199,20 +218,23 @@ String _formatDate(DateTime date) {
   return '${date.year}-$month-$day';
 }
 
-/// Outside selection mode a long press starts it with this product selected;
-/// inside it, tapping the row (or its checkbox) toggles the product.
+/// Outside selection mode a tap opens the editor ([onOpen]) and a long press
+/// starts selection mode with this product selected; inside it, tapping the
+/// row (or its checkbox) toggles the product.
 class _OverviewProductTile extends StatelessWidget {
   const _OverviewProductTile({
     required this.product,
     required this.storageSpot,
     required this.isSelecting,
     required this.isSelected,
+    required this.onOpen,
   });
 
   final PersistedProduct product;
   final StorageSpot? storageSpot;
   final bool isSelecting;
   final bool isSelected;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -231,7 +253,7 @@ class _OverviewProductTile extends StatelessWidget {
         'exp. ${_formatDate(product.expirationDate)}',
       ),
       selected: isSelected,
-      onTap: isSelecting ? toggle : null,
+      onTap: isSelecting ? toggle : onOpen,
       onLongPress: isSelecting ? null : toggle,
     );
   }
