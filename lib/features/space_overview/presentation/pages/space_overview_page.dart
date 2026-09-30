@@ -18,6 +18,15 @@ class SpaceOverviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
+      listenWhen: (previous, current) =>
+          previous.deletionStatus != current.deletionStatus,
+      listener: _showDeletionFeedback,
+      child: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
     return BlocBuilder<SpaceOverviewBloc, SpaceOverviewState>(
       builder: (context, state) {
         final status = state.status;
@@ -52,20 +61,37 @@ class SpaceOverviewPage extends StatelessWidget {
             for (final spot in overview.storageSpots) spot.id: spot,
           };
 
-          return Scaffold(
-            appBar: _buildAppBar(context, '${overview.emoji} ${overview.name}'),
-            body: overview.productResults.isEmpty
-                ? const Center(child: Text('No products yet.'))
-                : ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      for (final product in overview.productResults)
-                        _OverviewProductTile(
-                          product: product,
-                          storageSpot: storageSpotsById[product.storageSpotId],
-                        ),
-                    ],
-                  ),
+          // While selecting, back clears the selection instead of leaving.
+          return PopScope(
+            canPop: !state.isSelecting,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+              context.read<SpaceOverviewBloc>().add(
+                const ProductSelectionCleared(),
+              );
+            },
+            child: Scaffold(
+              appBar: state.isSelecting
+                  ? _buildSelectionAppBar(context, state)
+                  : _buildAppBar(context, '${overview.emoji} ${overview.name}'),
+              body: overview.productResults.isEmpty
+                  ? const Center(child: Text('No products yet.'))
+                  : ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        for (final product in overview.productResults)
+                          _OverviewProductTile(
+                            product: product,
+                            storageSpot:
+                                storageSpotsById[product.storageSpotId],
+                            isSelecting: state.isSelecting,
+                            isSelected: state.selectedProductIds.contains(
+                              product.id,
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
           );
         }
 
@@ -97,7 +123,75 @@ class SpaceOverviewPage extends StatelessWidget {
             ),
     );
   }
+
+  AppBar _buildSelectionAppBar(BuildContext context, SpaceOverviewState state) {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        tooltip: 'Cancel selection',
+        onPressed: () => context.read<SpaceOverviewBloc>().add(
+          const ProductSelectionCleared(),
+        ),
+      ),
+      title: Text('${state.selectedProductIds.length} selected'),
+      actions: [
+        if (state.deletionStatus is ProductDeletionInProgress)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: SizedBox.square(
+              dimension: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Delete selected',
+            onPressed: () =>
+                _confirmDelete(context, state.selectedProductIds.length),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, int count) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete ${_productCount(count)}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    context.read<SpaceOverviewBloc>().add(
+      const SelectedProductsDeleteSubmitted(),
+    );
+  }
+
+  void _showDeletionFeedback(BuildContext context, SpaceOverviewState state) {
+    final message = switch (state.deletionStatus) {
+      ProductDeletionSuccess(:final deletedCount) =>
+        '${_productCount(deletedCount)} deleted',
+      ProductDeletionFailure(:final message) => message,
+      _ => null,
+    };
+    if (message == null) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 }
+
+String _productCount(int count) => count == 1 ? '1 product' : '$count products';
 
 String _formatDate(DateTime date) {
   final month = date.month.toString().padLeft(2, '0');
@@ -105,24 +199,40 @@ String _formatDate(DateTime date) {
   return '${date.year}-$month-$day';
 }
 
+/// Outside selection mode a long press starts it with this product selected;
+/// inside it, tapping the row (or its checkbox) toggles the product.
 class _OverviewProductTile extends StatelessWidget {
   const _OverviewProductTile({
     required this.product,
     required this.storageSpot,
+    required this.isSelecting,
+    required this.isSelected,
   });
 
   final PersistedProduct product;
   final StorageSpot? storageSpot;
+  final bool isSelecting;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
     final spotLabel = storageSpot?.name ?? 'No suggested spot';
+    void toggle() => context.read<SpaceOverviewBloc>().add(
+      ProductSelectionToggled(product.id),
+    );
+
     return ListTile(
+      leading: isSelecting
+          ? Checkbox(value: isSelected, onChanged: (_) => toggle())
+          : null,
       title: Text(product.productName),
       subtitle: Text(
         '${product.productType} · $spotLabel · '
         'exp. ${_formatDate(product.expirationDate)}',
       ),
+      selected: isSelected,
+      onTap: isSelecting ? toggle : null,
+      onLongPress: isSelecting ? null : toggle,
     );
   }
 }
