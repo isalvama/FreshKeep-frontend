@@ -69,7 +69,11 @@ void setupServiceLocator({required Dio dio}) {
   );
   getIt.registerFactory(() => GetSpaceOverviewUseCase(getIt()));
   getIt.registerFactory(
-    () => SpaceOverviewBloc(getSpaceOverviewUseCase: getIt()),
+    () => SpaceOverviewBloc(
+      getSpaceOverviewUseCase: getIt(),
+      deleteProductUseCase: getIt(),
+      deleteProductsUseCase: getIt(),
+    ),
   );
 
   getIt.registerLazySingleton<ProductRemoteDataSource>(

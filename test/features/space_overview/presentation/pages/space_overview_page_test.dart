@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/domain/repositories/product_repository.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_product_usecase.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_products_usecase.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_product.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/entities/space_overview.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/repositories/space_overview_repository.dart';
@@ -40,6 +43,18 @@ class _PendingSpaceOverviewRepository implements SpaceOverviewRepository {
   Future<Either<SpaceOverviewFailure, SpaceOverview>> getSpaceOverview({
     required String spaceId,
   }) => completer.future;
+}
+
+class _UnusedProductRepository implements ProductRepository {
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProduct({
+    required String productId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProducts({
+    required List<String> productIds,
+  }) => throw UnimplementedError();
 }
 
 const _fridge = StorageSpot(
@@ -94,9 +109,15 @@ const _emptyOverview = SpaceOverview(
   productResults: [],
 );
 
-SpaceOverviewBloc _buildBloc(SpaceOverviewRepository repository) {
+SpaceOverviewBloc _buildBloc(
+  SpaceOverviewRepository repository, {
+  ProductRepository? productRepository,
+}) {
+  final products = productRepository ?? _UnusedProductRepository();
   return SpaceOverviewBloc(
     getSpaceOverviewUseCase: GetSpaceOverviewUseCase(repository),
+    deleteProductUseCase: DeleteProductUseCase(products),
+    deleteProductsUseCase: DeleteProductsUseCase(products),
   );
 }
 

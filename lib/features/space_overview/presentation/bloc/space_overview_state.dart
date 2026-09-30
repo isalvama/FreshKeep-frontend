@@ -24,19 +24,61 @@ final class SpaceOverviewLoadFailure extends SpaceOverviewStatus {
   const SpaceOverviewLoadFailure(this.message);
 }
 
+sealed class ProductDeletionStatus {
+  const ProductDeletionStatus();
+}
+
+final class ProductDeletionIdle extends ProductDeletionStatus {
+  const ProductDeletionIdle();
+}
+
+final class ProductDeletionInProgress extends ProductDeletionStatus {
+  const ProductDeletionInProgress();
+}
+
+final class ProductDeletionSuccess extends ProductDeletionStatus {
+  final int deletedCount;
+
+  const ProductDeletionSuccess(this.deletedCount);
+}
+
+final class ProductDeletionFailure extends ProductDeletionStatus {
+  final String message;
+
+  const ProductDeletionFailure(this.message);
+}
+
 class SpaceOverviewState extends Equatable {
   final SpaceOverviewStatus status;
 
-  const SpaceOverviewState({required this.status});
+  /// Empty when not in selection mode.
+  final Set<String> selectedProductIds;
+  final ProductDeletionStatus deletionStatus;
+
+  const SpaceOverviewState({
+    required this.status,
+    this.selectedProductIds = const {},
+    this.deletionStatus = const ProductDeletionIdle(),
+  });
 
   factory SpaceOverviewState.initial() {
     return const SpaceOverviewState(status: SpaceOverviewInitial());
   }
 
-  SpaceOverviewState copyWith({SpaceOverviewStatus? status}) {
-    return SpaceOverviewState(status: status ?? this.status);
+  bool get isSelecting => selectedProductIds.isNotEmpty;
+
+  SpaceOverviewState copyWith({
+    SpaceOverviewStatus? status,
+    Set<String>? selectedProductIds,
+    ProductDeletionStatus? deletionStatus,
+  }) {
+    return SpaceOverviewState(
+      status: status ?? this.status,
+      selectedProductIds: selectedProductIds ?? this.selectedProductIds,
+      deletionStatus: deletionStatus ?? this.deletionStatus,
+    );
   }
 
   @override
-  List<Object?> get props => [status];
+  List<Object?> get props => [status, selectedProductIds, deletionStatus];
 }
