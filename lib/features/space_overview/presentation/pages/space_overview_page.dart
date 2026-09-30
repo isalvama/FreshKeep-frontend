@@ -52,20 +52,37 @@ class SpaceOverviewPage extends StatelessWidget {
             for (final spot in overview.storageSpots) spot.id: spot,
           };
 
-          return Scaffold(
-            appBar: _buildAppBar(context, '${overview.emoji} ${overview.name}'),
-            body: overview.productResults.isEmpty
-                ? const Center(child: Text('No products yet.'))
-                : ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      for (final product in overview.productResults)
-                        _OverviewProductTile(
-                          product: product,
-                          storageSpot: storageSpotsById[product.storageSpotId],
-                        ),
-                    ],
-                  ),
+          // While selecting, back clears the selection instead of leaving.
+          return PopScope(
+            canPop: !state.isSelecting,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+              context.read<SpaceOverviewBloc>().add(
+                const ProductSelectionCleared(),
+              );
+            },
+            child: Scaffold(
+              appBar: state.isSelecting
+                  ? _buildSelectionAppBar(context, state)
+                  : _buildAppBar(context, '${overview.emoji} ${overview.name}'),
+              body: overview.productResults.isEmpty
+                  ? const Center(child: Text('No products yet.'))
+                  : ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        for (final product in overview.productResults)
+                          _OverviewProductTile(
+                            product: product,
+                            storageSpot:
+                                storageSpotsById[product.storageSpotId],
+                            isSelecting: state.isSelecting,
+                            isSelected: state.selectedProductIds.contains(
+                              product.id,
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
           );
         }
 
@@ -97,6 +114,19 @@ class SpaceOverviewPage extends StatelessWidget {
             ),
     );
   }
+
+  AppBar _buildSelectionAppBar(BuildContext context, SpaceOverviewState state) {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        tooltip: 'Cancel selection',
+        onPressed: () => context.read<SpaceOverviewBloc>().add(
+          const ProductSelectionCleared(),
+        ),
+      ),
+      title: Text('${state.selectedProductIds.length} selected'),
+    );
+  }
 }
 
 String _formatDate(DateTime date) {
@@ -105,24 +135,40 @@ String _formatDate(DateTime date) {
   return '${date.year}-$month-$day';
 }
 
+/// Outside selection mode a long press starts it with this product selected;
+/// inside it, tapping the row (or its checkbox) toggles the product.
 class _OverviewProductTile extends StatelessWidget {
   const _OverviewProductTile({
     required this.product,
     required this.storageSpot,
+    required this.isSelecting,
+    required this.isSelected,
   });
 
   final PersistedProduct product;
   final StorageSpot? storageSpot;
+  final bool isSelecting;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
     final spotLabel = storageSpot?.name ?? 'No suggested spot';
+    void toggle() => context.read<SpaceOverviewBloc>().add(
+      ProductSelectionToggled(product.id),
+    );
+
     return ListTile(
+      leading: isSelecting
+          ? Checkbox(value: isSelected, onChanged: (_) => toggle())
+          : null,
       title: Text(product.productName),
       subtitle: Text(
         '${product.productType} · $spotLabel · '
         'exp. ${_formatDate(product.expirationDate)}',
       ),
+      selected: isSelected,
+      onTap: isSelecting ? toggle : null,
+      onLongPress: isSelecting ? null : toggle,
     );
   }
 }

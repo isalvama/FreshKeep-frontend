@@ -402,4 +402,120 @@ void main() {
       expect(find.text('Home page'), findsOneWidget);
     });
   });
+
+  group('selection mode', () {
+    Finder appBarText(String text) =>
+        find.descendant(of: find.byType(AppBar), matching: find.text(text));
+
+    Future<SpaceOverviewBloc> pumpLoaded(WidgetTester tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+      return bloc;
+    }
+
+    testWidgets('outside selection mode there are no checkboxes and tapping '
+        'a row selects nothing', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+      expect(find.byTooltip('Cancel selection'), findsNothing);
+    });
+
+    testWidgets('a long press enters selection mode with that row checked', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Checkbox), findsNWidgets(2));
+      final milkCheckbox = tester.widget<Checkbox>(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Milk'),
+          matching: find.byType(Checkbox),
+        ),
+      );
+      expect(milkCheckbox.value, isTrue);
+      final breadCheckbox = tester.widget<Checkbox>(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Bread'),
+          matching: find.byType(Checkbox),
+        ),
+      );
+      expect(breadCheckbox.value, isFalse);
+      expect(appBarText('1 selected'), findsOneWidget);
+      expect(appBarText('🏠 Kitchen'), findsNothing);
+      expect(find.byTooltip('Cancel selection'), findsOneWidget);
+    });
+
+    testWidgets('tapping rows toggles them, and deselecting the last one '
+        'leaves selection mode', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+      expect(appBarText('2 selected'), findsOneWidget);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+      expect(appBarText('1 selected'), findsOneWidget);
+
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+    });
+
+    testWidgets('the close button clears the selection', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Cancel selection'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+    });
+
+    testWidgets('system back while selecting clears the selection and stays; '
+        'back again returns to Home', (tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      final router = _buildRouter(bloc, initial: '/home');
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      router.push('/space-overview/space-1', extra: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      expect(appBarText('1 selected'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsNothing);
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsOneWidget);
+    });
+  });
 }
