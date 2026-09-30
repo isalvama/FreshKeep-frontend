@@ -14,6 +14,7 @@ class SpacesBloc extends Bloc<SpacesEvent, SpacesState> {
     : super(SpacesState.initial()) {
     on<SpaceCreated>(_onSpaceCreated);
     on<SpacesRequested>(_onSpacesRequested);
+    on<SpacesRefreshed>(_onSpacesRefreshed);
   }
 
   void _onSpaceCreated(SpaceCreated event, Emitter<SpacesState> emit) {
@@ -40,6 +41,24 @@ class SpacesBloc extends Bloc<SpacesEvent, SpacesState> {
           errorMessage: failure.message,
         ),
       ),
+      (spaces) => emit(
+        state.copyWith(
+          spaces: spaces,
+          status: SpacesStatus.loaded,
+          errorMessage: null,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _onSpacesRefreshed(
+    SpacesRefreshed event,
+    Emitter<SpacesState> emit,
+  ) async {
+    final result = await getUserSpacesUseCase();
+
+    result.match(
+      (_) {},
       (spaces) => emit(
         state.copyWith(
           spaces: spaces,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:go_router/go_router.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_product.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/entities/space_overview.dart';
@@ -11,6 +12,7 @@ import 'package:fresh_keep_frontend/features/space_overview/domain/repositories/
 import 'package:fresh_keep_frontend/features/space_overview/domain/usecases/get_space_overview_usecase.dart';
 import 'package:fresh_keep_frontend/features/space_overview/presentation/bloc/space_overview_bloc.dart';
 import 'package:fresh_keep_frontend/features/space_overview/presentation/pages/space_overview_page.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
 
@@ -73,6 +75,17 @@ final _overview = SpaceOverview(
   ],
 );
 
+/// The space as Home last saw it; its name differs from [_overview]'s, as if
+/// it had been renamed since Home loaded its list.
+const _homeSpace = Space(
+  id: 'space-1',
+  spaceName: 'Old kitchen',
+  emoji: '🍳',
+  storageSpots: [],
+  creatorId: 'user-1',
+  participantIds: ['user-1'],
+);
+
 const _emptyOverview = SpaceOverview(
   id: 'space-1',
   name: 'Garage',
@@ -87,14 +100,43 @@ SpaceOverviewBloc _buildBloc(SpaceOverviewRepository repository) {
   );
 }
 
-Future<void> _pumpOverviewPage(WidgetTester tester, SpaceOverviewBloc bloc) {
+Future<void> _pumpOverviewPage(
+  WidgetTester tester,
+  SpaceOverviewBloc bloc, {
+  Space? space,
+}) {
   return tester.pumpWidget(
     BlocProvider<SpaceOverviewBloc>.value(
       value: bloc,
-      child: const MaterialApp(
-        home: SpaceOverviewPage(spaceId: 'space-1'),
+      child: MaterialApp(
+        home: SpaceOverviewPage(spaceId: 'space-1', space: space),
       ),
     ),
+  );
+}
+
+/// Mirrors the app's `/home` and `/space-overview/:spaceId` routes, with
+/// the overview reading its `Space` from `extra`.
+GoRouter _buildRouter(SpaceOverviewBloc bloc, {required String initial}) {
+  return GoRouter(
+    initialLocation: initial,
+    routes: [
+      GoRoute(
+        path: '/home',
+        builder: (context, state) =>
+            const Scaffold(body: Center(child: Text('Home page'))),
+      ),
+      GoRoute(
+        path: '/space-overview/:spaceId',
+        builder: (context, state) => BlocProvider<SpaceOverviewBloc>.value(
+          value: bloc,
+          child: SpaceOverviewPage(
+            spaceId: state.pathParameters['spaceId']!,
+            space: state.extra as Space?,
+          ),
+        ),
+      ),
+    ],
   );
 }
 
@@ -112,9 +154,7 @@ void main() {
   testWidgets(
     'shows the space name/emoji and every product with its resolved storage spot',
     (tester) async {
-      final bloc = _buildBloc(
-        _StubSpaceOverviewRepository([Right(_overview)]),
-      );
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
 
       await _pumpOverviewPage(tester, bloc);
       bloc.add(const SpaceOverviewRequested('space-1'));
@@ -143,16 +183,96 @@ void main() {
     expect(find.text('No products yet.'), findsOneWidget);
   });
 
-  testWidgets(
-    'shows the failure message and Retry re-fetches successfully',
-    (tester) async {
-      const failure = SpaceOverviewConflictFailure(
-        'You are not a participant of this space.',
+  testWidgets('shows the failure message and Retry re-fetches successfully', (
+    tester,
+  ) async {
+    const failure = SpaceOverviewConflictFailure(
+      'You are not a participant of this space.',
+    );
+    final bloc = _buildBloc(
+      _StubSpaceOverviewRepository([const Left(failure), Right(_overview)]),
+    );
+
+    await _pumpOverviewPage(tester, bloc);
+    bloc.add(const SpaceOverviewRequested('space-1'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('You are not a participant of this space.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('🏠 Kitchen'), findsOneWidget);
+  });
+
+  group('AppBar title', () {
+    testWidgets('while loading, uses the space passed from Home', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_PendingSpaceOverviewRepository());
+
+      await _pumpOverviewPage(tester, bloc, space: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pump();
+
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('🍳 Old kitchen'),
+        ),
+        findsOneWidget,
       );
+    });
+
+    testWidgets('while loading without a space, falls back to "Space"', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_PendingSpaceOverviewRepository());
+
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pump();
+
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('Space')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('on load failure, uses the space passed from Home', (
+      tester,
+    ) async {
       final bloc = _buildBloc(
         _StubSpaceOverviewRepository([
-          const Left(failure),
-          Right(_overview),
+          const Left(SpaceOverviewConflictFailure('Nope.')),
+        ]),
+      );
+
+      await _pumpOverviewPage(tester, bloc, space: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nope.'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('🍳 Old kitchen'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('on load failure without a space, falls back to "Space"', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([
+          const Left(SpaceOverviewConflictFailure('Nope.')),
         ]),
       );
 
@@ -161,14 +281,104 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('You are not a participant of this space.'),
+        find.descendant(of: find.byType(AppBar), matching: find.text('Space')),
         findsOneWidget,
       );
+    });
 
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Retry'));
+    testWidgets(
+      'once loaded, uses the overview response even when the passed space '
+      'differs',
+      (tester) async {
+        final bloc = _buildBloc(
+          _StubSpaceOverviewRepository([Right(_overview)]),
+        );
+
+        await _pumpOverviewPage(tester, bloc, space: _homeSpace);
+        bloc.add(const SpaceOverviewRequested('space-1'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('🏠 Kitchen'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('🍳 Old kitchen'), findsNothing);
+      },
+    );
+  });
+
+  group('leading button', () {
+    testWidgets(
+      'with nothing to pop (receipt flow), "Back to Home" goes to /home',
+      (tester) async {
+        final bloc = _buildBloc(
+          _StubSpaceOverviewRepository([Right(_overview)]),
+        );
+        final router = _buildRouter(bloc, initial: '/space-overview/space-1');
+        addTearDown(router.dispose);
+
+        await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+        bloc.add(const SpaceOverviewRequested('space-1'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BackButton), findsNothing);
+        await tester.tap(find.byTooltip('Back to Home'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Home page'), findsOneWidget);
+        expect(
+          router.routerDelegate.currentConfiguration.uri.toString(),
+          '/home',
+        );
+      },
+    );
+
+    testWidgets(
+      'with nothing to pop, "Back to Home" is also shown while loading and '
+      'on load failure',
+      (tester) async {
+        final bloc = _buildBloc(
+          _StubSpaceOverviewRepository([
+            const Left(SpaceOverviewConflictFailure('Nope.')),
+          ]),
+        );
+        final router = _buildRouter(bloc, initial: '/space-overview/space-1');
+        addTearDown(router.dispose);
+
+        await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byTooltip('Back to Home'), findsOneWidget);
+
+        bloc.add(const SpaceOverviewRequested('space-1'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Nope.'), findsOneWidget);
+        expect(find.byTooltip('Back to Home'), findsOneWidget);
+      },
+    );
+
+    testWidgets('pushed from Home, the back arrow pops back to Home', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      final router = _buildRouter(bloc, initial: '/home');
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      router.push('/space-overview/space-1', extra: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
       await tester.pumpAndSettle();
 
-      expect(find.text('🏠 Kitchen'), findsOneWidget);
-    },
-  );
+      expect(find.byTooltip('Back to Home'), findsNothing);
+      expect(find.byType(BackButton), findsOneWidget);
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsOneWidget);
+    });
+  });
 }
