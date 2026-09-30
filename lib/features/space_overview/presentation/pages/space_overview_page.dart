@@ -18,6 +18,15 @@ class SpaceOverviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
+      listenWhen: (previous, current) =>
+          previous.deletionStatus != current.deletionStatus,
+      listener: _showDeletionFeedback,
+      child: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
     return BlocBuilder<SpaceOverviewBloc, SpaceOverviewState>(
       builder: (context, state) {
         final status = state.status;
@@ -125,9 +134,64 @@ class SpaceOverviewPage extends StatelessWidget {
         ),
       ),
       title: Text('${state.selectedProductIds.length} selected'),
+      actions: [
+        if (state.deletionStatus is ProductDeletionInProgress)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: SizedBox.square(
+              dimension: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Delete selected',
+            onPressed: () =>
+                _confirmDelete(context, state.selectedProductIds.length),
+          ),
+      ],
     );
   }
+
+  Future<void> _confirmDelete(BuildContext context, int count) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete ${_productCount(count)}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    context.read<SpaceOverviewBloc>().add(
+      const SelectedProductsDeleteSubmitted(),
+    );
+  }
+
+  void _showDeletionFeedback(BuildContext context, SpaceOverviewState state) {
+    final message = switch (state.deletionStatus) {
+      ProductDeletionSuccess(:final deletedCount) =>
+        '${_productCount(deletedCount)} deleted',
+      ProductDeletionFailure(:final message) => message,
+      _ => null,
+    };
+    if (message == null) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 }
+
+String _productCount(int count) => count == 1 ? '1 product' : '$count products';
 
 String _formatDate(DateTime date) {
   final month = date.month.toString().padLeft(2, '0');
