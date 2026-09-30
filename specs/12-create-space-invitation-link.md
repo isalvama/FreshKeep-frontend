@@ -1,6 +1,6 @@
 # SPEC 12 — Create a space invitation link
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:**
 > - SPEC 03 (create-space-storage-spots): extends `lib/features/spaces/`, including `SpaceRepository`, `SpaceRemoteDataSource` and `SpaceFailure`.
 > - SPEC 08 (open-space-overview-from-home): adds an action to the space overview's AppBar.
