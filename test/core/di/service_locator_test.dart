@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fresh_keep_frontend/core/di/service_locator.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/usecases/create_space_invitation_usecase.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/usecases/join_space_invitation_usecase.dart';
 import 'package:fresh_keep_frontend/features/spaces/presentation/bloc/space_invitation_bloc.dart';
 
 void main() {
@@ -10,6 +11,10 @@ void main() {
 
   test('resolves CreateSpaceInvitationUseCase', () {
     expect(getIt<CreateSpaceInvitationUseCase>(), isNotNull);
+  });
+
+  test('resolves JoinSpaceInvitationUseCase', () {
+    expect(getIt<JoinSpaceInvitationUseCase>(), isNotNull);
   });
 
   test('resolves a new SpaceInvitationBloc each time', () async {

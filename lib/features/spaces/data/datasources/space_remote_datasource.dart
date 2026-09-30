@@ -27,4 +27,11 @@ class SpaceRemoteDataSource {
       response.data as Map<String, dynamic>,
     );
   }
+
+  Future<String> joinInvitation(String token) async {
+    final response = await dio.post(
+      '/api/v1/spaces/invitations/${Uri.encodeComponent(token)}/join',
+    );
+    return (response.data as Map<String, dynamic>)['spaceId'] as String;
+  }
 }

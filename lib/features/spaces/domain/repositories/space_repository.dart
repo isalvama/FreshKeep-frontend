@@ -17,4 +17,7 @@ abstract class SpaceRepository {
   Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
     required String spaceId,
   });
+
+  /// Joins the space behind [token]; returns the joined space's id.
+  Future<Either<SpaceFailure, String>> joinInvitation({required String token});
 }
