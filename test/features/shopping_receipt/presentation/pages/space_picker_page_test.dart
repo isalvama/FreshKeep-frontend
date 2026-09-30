@@ -15,6 +15,7 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/re
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/space_picker_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space_invitation.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/repositories/space_repository.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/usecases/get_user_spaces_usecase.dart';
@@ -76,6 +77,11 @@ class _StubSpaceRepository implements SpaceRepository {
   @override
   Future<Either<SpaceFailure, List<Space>>> getUserSpaces() async =>
       Right(spaces);
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) => throw UnimplementedError();
 }
 
 const _space1 = Space(

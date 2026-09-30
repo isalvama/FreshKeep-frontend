@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/di/service_locator.dart';
 import '../../../products/domain/entities/updated_product.dart';
 import '../../../shopping_receipt/domain/entities/persisted_product.dart';
 import '../../../spaces/domain/entities/space.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
+import '../../../spaces/presentation/bloc/space_invitation_bloc.dart';
+import '../../../spaces/presentation/widgets/space_invitation_dialog.dart';
 import '../../domain/entities/move_destination.dart';
 import '../bloc/space_overview_bloc.dart';
 import '../widgets/move_destination_sheet.dart';
@@ -21,20 +24,26 @@ class SpaceOverviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocListener(
-      listeners: [
-        BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
-          listenWhen: (previous, current) =>
-              previous.deletionStatus != current.deletionStatus,
-          listener: _showDeletionFeedback,
-        ),
-        BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
-          listenWhen: (previous, current) =>
-              previous.moveStatus != current.moveStatus,
-          listener: _showMoveFeedback,
-        ),
-      ],
-      child: _buildBody(),
+    return BlocProvider<SpaceInvitationBloc>(
+      create: (_) => getIt<SpaceInvitationBloc>(),
+      child: MultiBlocListener(
+        listeners: [
+          BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
+            listenWhen: (previous, current) =>
+                previous.deletionStatus != current.deletionStatus,
+            listener: _showDeletionFeedback,
+          ),
+          BlocListener<SpaceOverviewBloc, SpaceOverviewState>(
+            listenWhen: (previous, current) =>
+                previous.moveStatus != current.moveStatus,
+            listener: _showMoveFeedback,
+          ),
+          BlocListener<SpaceInvitationBloc, SpaceInvitationState>(
+            listener: _showInvitationFeedback,
+          ),
+        ],
+        child: _buildBody(),
+      ),
     );
   }
 
@@ -85,7 +94,11 @@ class SpaceOverviewPage extends StatelessWidget {
             child: Scaffold(
               appBar: state.isSelecting
                   ? _buildSelectionAppBar(context, state)
-                  : _buildAppBar(context, '${overview.emoji} ${overview.name}'),
+                  : _buildAppBar(
+                      context,
+                      '${overview.emoji} ${overview.name}',
+                      actions: [_buildInviteAction()],
+                    ),
               body: overview.productResults.isEmpty
                   ? const Center(child: Text('No products yet.'))
                   : ListView(
@@ -124,9 +137,14 @@ class SpaceOverviewPage extends StatelessWidget {
   /// Opened from Home (pushed), the default back arrow pops. Reached from the
   /// receipt flow (`go`), there is nothing to pop, so the leading button
   /// goes to Home instead.
-  AppBar _buildAppBar(BuildContext context, String title) {
+  AppBar _buildAppBar(
+    BuildContext context,
+    String title, {
+    List<Widget>? actions,
+  }) {
     return AppBar(
       title: Text(title),
+      actions: actions,
       leading: Navigator.of(context).canPop()
           ? null
           : IconButton(
@@ -137,15 +155,26 @@ class SpaceOverviewPage extends StatelessWidget {
     );
   }
 
-  AppBar _buildSelectionAppBar(BuildContext context, SpaceOverviewState state) {
-    const spinner = Padding(
-      padding: EdgeInsets.all(16),
-      child: SizedBox.square(
-        dimension: 24,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      ),
+  /// Each tap creates a new invitation; the result is shown by
+  /// [_showInvitationFeedback].
+  Widget _buildInviteAction() {
+    return BlocBuilder<SpaceInvitationBloc, SpaceInvitationState>(
+      builder: (context, state) {
+        if (state.status == SpaceInvitationStatus.inProgress) {
+          return _actionSpinner;
+        }
+        return IconButton(
+          icon: const Icon(Icons.person_add_alt_1),
+          tooltip: 'Invite',
+          onPressed: () => context.read<SpaceInvitationBloc>().add(
+            SpaceInvitationRequested(spaceId),
+          ),
+        );
+      },
     );
+  }
 
+  AppBar _buildSelectionAppBar(BuildContext context, SpaceOverviewState state) {
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.close),
@@ -159,11 +188,11 @@ class SpaceOverviewPage extends StatelessWidget {
       title: Text('${state.selectedProductIds.length} selected'),
       actions: [
         if (state.moveStatus is ProductMoveInProgress)
-          spinner
+          _actionSpinner
         else
           _buildMoveAction(context, state),
         if (state.deletionStatus is ProductDeletionInProgress)
-          spinner
+          _actionSpinner
         else
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -297,6 +326,29 @@ class SpaceOverviewPage extends StatelessWidget {
       ..showSnackBar(const SnackBar(content: Text('Product updated')));
   }
 
+  void _showInvitationFeedback(
+    BuildContext context,
+    SpaceInvitationState state,
+  ) {
+    switch (state.status) {
+      case SpaceInvitationStatus.success:
+        final overviewStatus = context.read<SpaceOverviewBloc>().state.status;
+        showSpaceInvitationDialog(
+          context,
+          spaceName: overviewStatus is SpaceOverviewLoadSuccess
+              ? overviewStatus.overview.name
+              : space?.spaceName ?? 'this space',
+          invitation: state.invitation!,
+        );
+      case SpaceInvitationStatus.failure:
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(state.errorMessage ?? '')));
+      case SpaceInvitationStatus.initial || SpaceInvitationStatus.inProgress:
+        break;
+    }
+  }
+
   void _showMoveFeedback(BuildContext context, SpaceOverviewState state) {
     final message = switch (state.moveStatus) {
       ProductMoveSuccess(:final destination, :final newExpirationDate) =>
@@ -324,6 +376,15 @@ class SpaceOverviewPage extends StatelessWidget {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
+
+/// Replaces an AppBar action while its request runs.
+const _actionSpinner = Padding(
+  padding: EdgeInsets.all(16),
+  child: SizedBox.square(
+    dimension: 24,
+    child: CircularProgressIndicator(strokeWidth: 2),
+  ),
+);
 
 String _destinationLabel(MoveDestination destination) =>
     '${destination.spaceName} · ${destination.storageSpotName}';

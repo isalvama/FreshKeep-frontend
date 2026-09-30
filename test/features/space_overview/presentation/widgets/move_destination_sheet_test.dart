@@ -8,6 +8,7 @@ import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/entities/move_destination.dart';
 import 'package:fresh_keep_frontend/features/space_overview/presentation/widgets/move_destination_sheet.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space_invitation.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_input.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
@@ -35,6 +36,11 @@ class _SpaceRepository implements SpaceRepository {
     required String spaceName,
     required String emoji,
     required List<StorageSpotInput> storageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
   }) => throw UnimplementedError();
 }
 
