@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/widgets/product_type_icon.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
 import '../../domain/entities/product_extraction.dart';
 import '../bloc/shopping_receipt_bloc.dart';
@@ -344,10 +345,17 @@ class _ProductTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final spotLabel = storageSpot?.name ?? 'No suggested spot';
-    return CheckboxListTile(
-      value: selected,
-      onChanged: onChanged,
-      controlAffinity: ListTileControlAffinity.leading,
+    // A ListTile rather than a CheckboxListTile, which has no room for the
+    // type icon next to the checkbox. Tapping the row still toggles it.
+    return ListTile(
+      onTap: () => onChanged(!selected),
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Checkbox(value: selected, onChanged: onChanged),
+          ProductTypeIcon.fromName(product.productType),
+        ],
+      ),
       title: Text(product.productName),
       subtitle: Text.rich(
         TextSpan(
@@ -366,7 +374,7 @@ class _ProductTile extends StatelessWidget {
           ],
         ),
       ),
-      secondary: IconButton(
+      trailing: IconButton(
         icon: const Icon(Icons.calendar_today),
         tooltip: 'Edit expiration date',
         onPressed: onEditExpirationDate,

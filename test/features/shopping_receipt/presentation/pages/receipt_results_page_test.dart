@@ -249,10 +249,13 @@ void main() {
 
       await _pumpResultsPage(tester, bloc);
 
-      final milkTile = tester.widget<CheckboxListTile>(
-        find.widgetWithText(CheckboxListTile, 'Milk'),
+      final milkCheckbox = tester.widget<Checkbox>(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Milk'),
+          matching: find.byType(Checkbox),
+        ),
       );
-      expect(milkTile.value, isFalse);
+      expect(milkCheckbox.value, isFalse);
 
       await tester.tap(find.text('Milk'));
       await tester.pump();
@@ -577,7 +580,7 @@ void main() {
     DateTime today() => DateUtils.dateOnly(DateTime.now());
 
     Finder tileOf(String productName) =>
-        find.widgetWithText(CheckboxListTile, productName);
+        find.widgetWithText(ListTile, productName);
 
     Finder editIconOf(String productName) => find.descendant(
       of: tileOf(productName),

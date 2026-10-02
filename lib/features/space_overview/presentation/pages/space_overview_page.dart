@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/service_locator.dart';
+import '../../../../shared/widgets/product_type_icon.dart';
 import '../../../products/domain/entities/updated_product.dart';
 import '../../../shopping_receipt/domain/entities/persisted_product.dart';
 import '../../../spaces/domain/entities/space.dart';
@@ -423,9 +424,14 @@ class _OverviewProductTile extends StatelessWidget {
     );
 
     return ListTile(
-      leading: isSelecting
-          ? Checkbox(value: isSelected, onChanged: (_) => toggle())
-          : null,
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isSelecting)
+            Checkbox(value: isSelected, onChanged: (_) => toggle()),
+          ProductTypeIcon.fromName(product.productType),
+        ],
+      ),
       title: Text(product.productName),
       subtitle: Text(
         '${product.productType} · $spotLabel · '

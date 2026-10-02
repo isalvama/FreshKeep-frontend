@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/widgets/product_type_icon.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
 import '../../domain/entities/persisted_product.dart';
 import '../bloc/shopping_receipt_bloc.dart';
@@ -85,6 +86,7 @@ class _ReprocessedProductTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final spotLabel = storageSpot?.name ?? 'No suggested spot';
     return ListTile(
+      leading: ProductTypeIcon.fromName(product.productType),
       title: Text(product.productName),
       subtitle: Text(
         '${product.productType} · $spotLabel · '
