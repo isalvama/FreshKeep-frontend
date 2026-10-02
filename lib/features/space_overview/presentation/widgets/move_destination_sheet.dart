@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../spaces/domain/entities/space.dart';
 import '../../../spaces/presentation/bloc/spaces_bloc.dart';
 import '../../../spaces/presentation/widgets/storage_spot_type_sheet.dart';
@@ -146,12 +147,18 @@ class _MoveDestinationSheetState extends State<_MoveDestinationSheet> {
                 if (spot.id == widget.currentStorageSpotId)
                   ListTile(
                     enabled: false,
+                    // A disabled ListTile greys its text but not images.
+                    leading: Opacity(
+                      opacity: 0.38,
+                      child: StorageSpotTypeIcon(type: spot.type),
+                    ),
                     title: Text(spot.name),
                     subtitle: Text(storageSpotTypeLabel(spot.type)),
                     trailing: const Text('Current'),
                   )
                 else
                   ListTile(
+                    leading: StorageSpotTypeIcon(type: spot.type),
                     title: Text(spot.name),
                     subtitle: Text(storageSpotTypeLabel(spot.type)),
                     onTap: () => Navigator.of(context).pop(

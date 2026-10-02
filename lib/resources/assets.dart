@@ -23,4 +23,13 @@ abstract class Assets {
   static const internationalIcon = '$_images/international.png';
   static const saucesIcon = '$_images/sauces.png';
   static const otherIcon = '$_images/other.png';
+
+  // Storage spot types
+  static const fridgeSpotIcon = '$_images/fridge.png';
+  static const freezerSpotIcon = '$_images/freezer.png';
+  static const pantrySpotIcon = '$_images/pantry_ss.png';
+  static const fruitBowlSpotIcon = '$_images/fruits_bowl.png';
+  static const wineCellarSpotIcon = '$_images/wine_cellar.png';
+  static const countertopSpotIcon = '$_images/countertop.png';
+  static const shelfSpotIcon = '$_images/shelf.png';
 }

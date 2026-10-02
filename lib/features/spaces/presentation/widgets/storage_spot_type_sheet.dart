@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/entities/storage_spot_type.dart';
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/widgets/storage_spot_type_icon.dart';
 
 const Map<StorageSpotType, String> _typeLabels = {
   StorageSpotType.fridge: 'Fridge',
@@ -40,6 +41,7 @@ Future<StorageSpotType?> showStorageSpotTypeSheet(
               ),
               for (final type in StorageSpotType.values)
                 ListTile(
+                  leading: StorageSpotTypeIcon(type: type),
                   title: Text(storageSpotTypeLabel(type)),
                   trailing: type == selected ? const Icon(Icons.check) : null,
                   onTap: () => Navigator.of(context).pop(type),
