@@ -189,12 +189,6 @@ class ReceiptResultsPage extends StatelessWidget {
                       : () => context.read<ShoppingReceiptBloc>().add(
                           const ReceiptConfirmSubmitted(),
                         ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: kCornerBorderRadius,
-                    ),
-                  ),
                   child: const Text('OK'),
                 ),
               ),
@@ -205,12 +199,6 @@ class ReceiptResultsPage extends StatelessWidget {
                   onPressed: isSubmitting || state.selectedForReprocess.isEmpty
                       ? null
                       : () => _submitReprocess(context, state.hasPendingEdits),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: kCornerBorderRadius,
-                    ),
-                  ),
                   child: const Text('Reprocess selected products'),
                 ),
               ),

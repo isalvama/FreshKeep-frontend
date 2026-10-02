@@ -17,7 +17,7 @@ String storageSpotTypeIconAsset(StorageSpotType type) {
 }
 
 /// A square storage spot type image. Decorative: the type is always shown as
-/// text next to it, so it is left out of semantics.
+/// txt next to it, so it is left out of semantics.
 class StorageSpotTypeIcon extends StatelessWidget {
   const StorageSpotTypeIcon({super.key, required this.type, this.size = 40});
 

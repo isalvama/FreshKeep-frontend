@@ -33,3 +33,18 @@ flutter:
 
   assets:
     - assets/images/
+
+  fonts:
+    - family: WorkSans
+      fonts:
+        - asset: assets/fonts/work_sans/WorkSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/work_sans/WorkSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/work_sans/WorkSans-SemiBold.ttf
+          weight: 600
+    - family: NunitoSans
+      fonts:
+        - asset: "assets/fonts/nunito_sans/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"
+        - asset: "assets/fonts/nunito_sans/NunitoSans-Italic-VariableFont_YTLC,opsz,wdth,wght.ttf"
+          style: italic

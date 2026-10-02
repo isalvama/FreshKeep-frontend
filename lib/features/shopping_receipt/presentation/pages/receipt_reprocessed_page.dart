@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/widgets/product_type_icon.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
 import '../../domain/entities/persisted_product.dart';
@@ -50,12 +49,6 @@ class ReceiptReprocessedPage extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () =>
                       context.go('/space-overview/${state.spaceId}'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: kCornerBorderRadius,
-                    ),
-                  ),
                   child: const Text('OK'),
                 ),
               ),
