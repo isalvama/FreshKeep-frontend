@@ -480,9 +480,13 @@ void main() {
       ],
     );
 
-    UpdatedProduct update(String id, DateTime date) => UpdatedProduct(
+    UpdatedProduct update(
+      String id,
+      DateTime date, {
+      String name = 'Oat milk',
+    }) => UpdatedProduct(
       productId: id,
-      name: 'Oat milk',
+      name: name,
       expirationDate: date,
       productType: 'DAIRY',
       amount: 2.5,
@@ -539,11 +543,24 @@ void main() {
       await bloc.close();
     });
 
-    test('keeps the existing order for equal dates', () async {
+    test('orders equal dates by name, like the backend', () async {
       final bloc = await loaded();
 
-      // p3 moves onto p2's date: p2 was first, so it stays first.
+      // p3 moves onto p2's date as "Oat milk", which sorts before "Product p2".
       bloc.add(ProductUpdated(update('p3', DateTime(2026, 10, 2))));
+      await _settle();
+
+      expect(_productIds(bloc.state), ['p1', 'p3', 'p2']);
+
+      await bloc.close();
+    });
+
+    test('keeps the existing order for equal dates and names', () async {
+      final bloc = await loaded();
+
+      bloc.add(
+        ProductUpdated(update('p3', DateTime(2026, 10, 2), name: 'Product p2')),
+      );
       await _settle();
 
       expect(_productIds(bloc.state), ['p1', 'p2', 'p3']);

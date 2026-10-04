@@ -434,8 +434,8 @@ class _OverviewProductTile extends StatelessWidget {
       ),
       title: Text(product.productName),
       subtitle: Text(
-        '${product.productType} · $spotLabel · '
-        'exp. ${_formatDate(product.expirationDate)}',
+        '$spotLabel · '
+        'exp. date: ${_formatDate(product.expirationDate)}',
       ),
       selected: isSelected,
       onTap: isSelecting ? toggle : onOpen,

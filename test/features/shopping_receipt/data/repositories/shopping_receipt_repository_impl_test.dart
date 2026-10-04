@@ -261,6 +261,42 @@ void main() {
       );
     });
 
+    for (final status in [502, 503]) {
+      test('$status (AI unavailable) maps to ShoppingReceiptServerFailure with '
+          'the backend detail', () async {
+        final repository = _buildRepository(
+          _JsonResponseAdapter(
+            statusCode: status,
+            body: {'title': 'AI Server Error', 'detail': 'AI is down'},
+          ),
+        );
+
+        final failure = (await _processNewReceipt(
+          repository,
+        )).getLeft().toNullable();
+
+        expect(failure, isA<ShoppingReceiptServerFailure>());
+        expect(failure!.message, 'AI is down');
+      });
+
+      test('$status without detail uses the AI-unavailable message', () async {
+        final repository = _buildRepository(
+          _JsonResponseAdapter(statusCode: status, body: <String, dynamic>{}),
+        );
+
+        final failure = (await _processNewReceipt(
+          repository,
+        )).getLeft().toNullable();
+
+        expect(failure, isA<ShoppingReceiptServerFailure>());
+        expect(
+          failure!.message,
+          "The receipt reader isn't available right now. "
+          'Please try again in a moment.',
+        );
+      });
+    }
+
     test('connection error maps to ShoppingReceiptNetworkFailure', () async {
       final repository = _buildRepository(_ConnectionErrorAdapter());
 
@@ -516,6 +552,25 @@ void main() {
         );
       });
 
+      test(
+        '503 (AI unavailable) maps to ShoppingReceiptServerFailure',
+        () async {
+          final repository = _buildRepository(
+            _JsonResponseAdapter(
+              statusCode: 503,
+              body: {'detail': 'AI is down'},
+            ),
+          );
+
+          final failure = (await _confirmReceipt(
+            repository,
+          )).getLeft().toNullable();
+
+          expect(failure, isA<ShoppingReceiptServerFailure>());
+          expect(failure!.message, 'AI is down');
+        },
+      );
+
       test('connection error maps to ShoppingReceiptNetworkFailure', () async {
         final repository = _buildRepository(_ConnectionErrorAdapter());
 
@@ -734,6 +789,25 @@ void main() {
           isA<ShoppingReceiptServerFailure>(),
         );
       });
+
+      test(
+        '503 (AI unavailable) maps to ShoppingReceiptServerFailure',
+        () async {
+          final repository = _buildRepository(
+            _JsonResponseAdapter(
+              statusCode: 503,
+              body: {'detail': 'AI is down'},
+            ),
+          );
+
+          final failure = (await _reprocessReceipt(
+            repository,
+          )).getLeft().toNullable();
+
+          expect(failure, isA<ShoppingReceiptServerFailure>());
+          expect(failure!.message, 'AI is down');
+        },
+      );
 
       test('connection error maps to ShoppingReceiptNetworkFailure', () async {
         final repository = _buildRepository(_ConnectionErrorAdapter());

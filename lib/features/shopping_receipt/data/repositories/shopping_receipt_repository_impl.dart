@@ -149,6 +149,15 @@ class ShoppingReceiptRepositoryImpl implements ShoppingReceiptRepository {
         return ShoppingReceiptServerFailure(
           detail ?? 'Something went wrong. Please try again.',
         );
+      // The AI answered with nothing usable (502) or couldn't be reached
+      // after retries (503).
+      case 502:
+      case 503:
+        return ShoppingReceiptServerFailure(
+          detail ??
+              "The receipt reader isn't available right now. "
+                  'Please try again in a moment.',
+        );
       default:
         return ShoppingReceiptNetworkFailure(
           e.message ?? 'Network error. Please check your connection.',

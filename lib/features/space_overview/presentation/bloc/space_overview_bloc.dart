@@ -118,8 +118,8 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
   }
 
   /// The PATCH response has no `storageSpotId`, so the one already in the
-  /// list is kept. The list stays sorted soonest-to-expire first, like the
-  /// backend returns it.
+  /// list is kept. The list stays sorted soonest-to-expire first, then by
+  /// name, like the backend returns it.
   void _onProductUpdated(
     ProductUpdated event,
     Emitter<SpaceOverviewState> emit,
@@ -241,12 +241,15 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     );
   }
 
-  /// Stable: products with the same date keep their current order.
+  /// Same order as the backend: by date, then by name. Stable for products
+  /// with the same date and name.
   List<PersistedProduct> _sortedByExpiration(List<PersistedProduct> products) {
     final indexed = products.indexed.toList()
       ..sort((a, b) {
         final byDate = a.$2.expirationDate.compareTo(b.$2.expirationDate);
-        return byDate != 0 ? byDate : a.$1.compareTo(b.$1);
+        if (byDate != 0) return byDate;
+        final byName = a.$2.productName.compareTo(b.$2.productName);
+        return byName != 0 ? byName : a.$1.compareTo(b.$1);
       });
     return [for (final (_, product) in indexed) product];
   }
