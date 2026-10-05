@@ -58,7 +58,13 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(title: const Text('Log in')),
       body: BlocListener<LoginBloc, FormStatus>(
         listener: (context, state) {
-          if (state is FormFailure) {
+          // The app-wide messenger keeps the SnackBar on screen while the
+          // router swaps this page for Home.
+          if (state is FormSuccess) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Logged in as ${state.user.email}')),
+            );
+          } else if (state is FormFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(state.message)),
             );

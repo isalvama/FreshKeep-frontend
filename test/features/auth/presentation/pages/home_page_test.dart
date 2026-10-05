@@ -154,8 +154,8 @@ Future<void> _pumpHomePage(WidgetTester tester, SpacesBloc spacesBloc) async {
   );
 }
 
-/// Home under GoRouter, with a stand-in overview page that shows the path
-/// parameter and the `Space` it received as `extra`.
+/// Home under GoRouter, with a stand-in account page and a stand-in overview
+/// page that shows the path parameter and the `Space` it received as `extra`.
 Future<GoRouter> _pumpHomeWithRouter(
   WidgetTester tester,
   SpacesBloc spacesBloc,
@@ -164,6 +164,10 @@ Future<GoRouter> _pumpHomeWithRouter(
     initialLocation: '/home',
     routes: [
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+      GoRoute(
+        path: '/account',
+        builder: (context, state) => const Scaffold(body: Text('Account stub')),
+      ),
       GoRoute(
         path: '/space-overview/:spaceId',
         builder: (context, state) {
@@ -290,6 +294,50 @@ void main() {
       expect(find.text('Process a New Receipt'), findsNothing);
     },
   );
+
+  testWidgets('Home has no log out button and no "Logged in as" text', (
+    tester,
+  ) async {
+    final spacesBloc = SpacesBloc(
+      getUserSpacesUseCase: GetUserSpacesUseCase(
+        _SequencedSpaceRepository([const Right([])]),
+      ),
+    );
+    spacesBloc.add(const SpacesRequested());
+
+    await _pumpHomePage(tester, spacesBloc);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Log out'), findsNothing);
+    expect(find.textContaining('Logged in'), findsNothing);
+  });
+
+  testWidgets('the app bar account button pushes /account', (tester) async {
+    final spacesBloc = SpacesBloc(
+      getUserSpacesUseCase: GetUserSpacesUseCase(
+        _SequencedSpaceRepository([const Right([])]),
+      ),
+    );
+    spacesBloc.add(const SpacesRequested());
+
+    final router = await _pumpHomeWithRouter(tester, spacesBloc);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byTooltip('Account'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Account stub'), findsOneWidget);
+    expect(
+      router.routerDelegate.currentConfiguration.last.matchedLocation,
+      '/account',
+    );
+    expect(router.canPop(), isTrue);
+  });
 
   group('opening a space', () {
     testWidgets('every space tile shows a trailing chevron', (tester) async {

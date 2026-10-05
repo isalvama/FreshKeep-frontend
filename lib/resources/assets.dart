@@ -32,4 +32,7 @@ abstract class Assets {
   static const wineCellarSpotIcon = '$_images/wine_cellar.png';
   static const countertopSpotIcon = '$_images/countertop.png';
   static const shelfSpotIcon = '$_images/shelf.png';
+
+  // Other
+  static const userIcon = '$_images/user.png';
 }
