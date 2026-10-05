@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/service_locator.dart';
+import '../../../../shared/widgets/expiration_date_badge.dart';
 import '../../../../shared/widgets/product_type_icon.dart';
 import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../products/domain/entities/updated_product.dart';
@@ -437,9 +438,14 @@ class _OverviewProductTile extends StatelessWidget {
       titleTextStyle: Theme.of(
         context,
       ).textTheme.titleMedium?.copyWith(fontSize: 18),
-      subtitle: Text(
-        '$spotLabel · '
-        'exp. date: ${_formatDate(product.expirationDate)}',
+      subtitle: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(spotLabel),
+          ExpirationDateBadge(date: product.expirationDate),
+        ],
       ),
       trailing: storageSpot == null
           ? null

@@ -659,13 +659,12 @@ void main() {
 
       expect(bloc.state.editedExpirationDates, {1: DateTime(2026, 9, 30)});
       expect(find.textContaining('edited'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: tileOf('Bread'),
-          matching: find.textContaining('exp. 2026-09-30 · edited'),
-        ),
-        findsOneWidget,
-      );
+      for (final text in ['30 Sep 2026', 'edited']) {
+        expect(
+          find.descendant(of: tileOf('Bread'), matching: find.text(text)),
+          findsOneWidget,
+        );
+      }
 
       await tester.tap(editIconOf('Bread'));
       await tester.pumpAndSettle();
@@ -685,9 +684,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Milk 09-15 and Eggs 09-25 shift by -3 days; Bread keeps 09-30.
-      expect(find.textContaining('exp. 2026-09-12'), findsOneWidget);
-      expect(find.textContaining('exp. 2026-09-22'), findsOneWidget);
-      expect(find.textContaining('exp. 2026-09-30'), findsOneWidget);
+      expect(find.text('12 Sep 2026'), findsOneWidget);
+      expect(find.text('22 Sep 2026'), findsOneWidget);
+      expect(find.text('30 Sep 2026'), findsOneWidget);
     });
 
     testWidgets(

@@ -23,4 +23,9 @@ abstract class AppColors {
   static const outlineLight = Color(0xFFEDE8E2);
 
   static const error = Color(0xFFC0473A);
+
+  // Expiration dates — expired (or expiring today) and expiring soon
+  static const expiredLight = Color(0xFFF6DEDA);
+  static const expiringSoon = Color(0xFF7A5C00);
+  static const expiringSoonLight = Color(0xFFFCEFC2);
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../shared/widgets/expiration_date_badge.dart';
 import '../../../../shared/widgets/product_type_icon.dart';
 import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
@@ -85,9 +86,14 @@ class _ReprocessedProductTile extends StatelessWidget {
       titleTextStyle: Theme.of(
         context,
       ).textTheme.titleMedium?.copyWith(fontSize: 18),
-      subtitle: Text(
-        '${product.productType} · $spotLabel · '
-        'exp. ${_formatDate(product.expirationDate)}',
+      subtitle: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('${product.productType} · $spotLabel'),
+          ExpirationDateBadge(date: product.expirationDate),
+        ],
       ),
       trailing: storageSpot == null
           ? null

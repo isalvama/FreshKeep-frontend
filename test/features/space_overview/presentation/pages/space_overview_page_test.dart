@@ -926,7 +926,7 @@ void main() {
       expect(find.text('Edit product'), findsNothing);
       expect(rowTitles(tester), ['Bread', 'Oat milk']);
       expect(find.textContaining('Fridge'), findsOneWidget);
-      expect(find.textContaining('exp. date: 2026-09-25'), findsOneWidget);
+      expect(find.text('25 Sep 2026'), findsOneWidget);
       expect(find.text('Product updated'), findsOneWidget);
 
       final overview = (bloc.state.status as SpaceOverviewLoadSuccess).overview;
@@ -1153,7 +1153,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(products.moveCalls, [('product-1', 'spot-1', 'spot-2')]);
-      expect(find.text('Top shelf · exp. date: 2026-09-30'), findsOneWidget);
+      final milkRow = find.widgetWithText(ListTile, 'Milk');
+      for (final text in ['Top shelf', '30 Sep 2026']) {
+        expect(
+          find.descendant(of: milkRow, matching: find.text(text)),
+          findsOneWidget,
+        );
+      }
       expect(rowTop(tester, 'Bread'), lessThan(rowTop(tester, 'Eggs')));
       expect(rowTop(tester, 'Eggs'), lessThan(rowTop(tester, 'Milk')));
       expect(

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/widgets/expiration_date_badge.dart';
 import '../../../../shared/widgets/product_type_icon.dart';
 import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
@@ -349,22 +350,22 @@ class _ProductTile extends StatelessWidget {
       titleTextStyle: Theme.of(
         context,
       ).textTheme.titleMedium?.copyWith(fontSize: 18),
-      subtitle: Text.rich(
-        TextSpan(
-          text:
-              '${product.productType} · $spotLabel · '
-              'exp. ${_formatDate(expirationDate)}',
-          children: [
-            if (edited)
-              TextSpan(
-                text: ' · edited',
-                style: TextStyle(
-                  fontStyle: FontStyle.italic,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+      subtitle: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('${product.productType} · $spotLabel'),
+          ExpirationDateBadge(date: expirationDate),
+          if (edited)
+            Text(
+              'edited',
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: Theme.of(context).colorScheme.primary,
               ),
-          ],
-        ),
+            ),
+        ],
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
