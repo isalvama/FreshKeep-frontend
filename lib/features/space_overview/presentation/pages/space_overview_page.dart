@@ -103,7 +103,7 @@ class SpaceOverviewPage extends StatelessWidget {
               body: overview.productResults.isEmpty
                   ? const Center(child: Text('No products yet.'))
                   : ListView(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(8),
                       children: [
                         for (final product in overview.productResults)
                           _OverviewProductTile(
@@ -433,6 +433,9 @@ class _OverviewProductTile extends StatelessWidget {
         ],
       ),
       title: Text(product.productName),
+      titleTextStyle: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontSize: 18),
       subtitle: Text(
         '$spotLabel · '
         'exp. date: ${_formatDate(product.expirationDate)}',

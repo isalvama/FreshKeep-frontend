@@ -120,6 +120,9 @@ class _MoveDestinationSheetState extends State<_MoveDestinationSheet> {
                           ? '${space.spaceName} (current)'
                           : space.spaceName,
                     ),
+                    titleTextStyle: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(fontSize: 18),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => setState(() => _openedSpace = space),
                   ),

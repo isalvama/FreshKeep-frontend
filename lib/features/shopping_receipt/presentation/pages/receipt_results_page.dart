@@ -345,6 +345,9 @@ class _ProductTile extends StatelessWidget {
         ],
       ),
       title: Text(product.productName),
+      titleTextStyle: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontSize: 18),
       subtitle: Text.rich(
         TextSpan(
           text:

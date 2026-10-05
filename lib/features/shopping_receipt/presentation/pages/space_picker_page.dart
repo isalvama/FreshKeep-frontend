@@ -46,6 +46,9 @@ class SpacePickerPage extends StatelessWidget {
                   style: const TextStyle(fontSize: 24),
                 ),
                 title: Text(space.spaceName),
+                titleTextStyle: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontSize: 18),
                 onTap: () => _onSpaceSelected(context, space.id),
               );
             },

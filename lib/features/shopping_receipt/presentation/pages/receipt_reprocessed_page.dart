@@ -81,6 +81,9 @@ class _ReprocessedProductTile extends StatelessWidget {
     return ListTile(
       leading: ProductTypeIcon.fromName(product.productType),
       title: Text(product.productName),
+      titleTextStyle: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontSize: 18),
       subtitle: Text(
         '${product.productType} · $spotLabel · '
         'exp. ${_formatDate(product.expirationDate)}',

@@ -60,7 +60,10 @@ abstract class AppTheme {
         scrolledUnderElevation: 0,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: textTheme.titleLarge,
+        titleTextStyle: textTheme.titleLarge!.copyWith(
+          fontSize: 20,
+          fontWeight: FontWeight.w500,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
