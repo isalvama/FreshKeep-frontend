@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/ui_constants.dart';
 import '../../../../shared/widgets/product_type_icon.dart';
+import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
 import '../../domain/entities/product_extraction.dart';
 import '../bloc/shopping_receipt_bloc.dart';
@@ -365,10 +366,16 @@ class _ProductTile extends StatelessWidget {
           ],
         ),
       ),
-      trailing: IconButton(
-        icon: const Icon(Icons.calendar_today),
-        tooltip: 'Edit expiration date',
-        onPressed: onEditExpirationDate,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (storageSpot != null) StorageSpotTypeIcon(type: storageSpot!.type),
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            tooltip: 'Edit expiration date',
+            onPressed: onEditExpirationDate,
+          ),
+        ],
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/service_locator.dart';
 import '../../../../shared/widgets/product_type_icon.dart';
+import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../products/domain/entities/updated_product.dart';
 import '../../../shopping_receipt/domain/entities/persisted_product.dart';
 import '../../../spaces/domain/entities/space.dart';
@@ -440,6 +441,9 @@ class _OverviewProductTile extends StatelessWidget {
         '$spotLabel · '
         'exp. date: ${_formatDate(product.expirationDate)}',
       ),
+      trailing: storageSpot == null
+          ? null
+          : StorageSpotTypeIcon(type: storageSpot!.type),
       selected: isSelected,
       onTap: isSelecting ? toggle : onOpen,
       onLongPress: isSelecting ? null : toggle,

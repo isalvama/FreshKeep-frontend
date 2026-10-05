@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../shared/widgets/product_type_icon.dart';
+import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
 import '../../domain/entities/persisted_product.dart';
 import '../bloc/shopping_receipt_bloc.dart';
@@ -88,6 +89,9 @@ class _ReprocessedProductTile extends StatelessWidget {
         '${product.productType} · $spotLabel · '
         'exp. ${_formatDate(product.expirationDate)}',
       ),
+      trailing: storageSpot == null
+          ? null
+          : StorageSpotTypeIcon(type: storageSpot!.type),
     );
   }
 }
