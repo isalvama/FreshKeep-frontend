@@ -16,7 +16,7 @@ import '../../domain/entities/move_destination.dart';
 import '../bloc/space_overview_bloc.dart';
 import '../widgets/move_destination_sheet.dart';
 
-class SpaceOverviewPage extends StatelessWidget {
+class SpaceOverviewPage extends StatefulWidget {
   const SpaceOverviewPage({super.key, required this.spaceId, this.space});
 
   final String spaceId;
@@ -24,6 +24,25 @@ class SpaceOverviewPage extends StatelessWidget {
   /// Passed as GoRouter `extra` when opened from Home; only used for the
   /// AppBar title until the overview loads.
   final Space? space;
+
+  @override
+  State<SpaceOverviewPage> createState() => _SpaceOverviewPageState();
+}
+
+/// Holds whether the search field is open; the query itself, and the
+/// filtering, live in [SpaceOverviewBloc].
+class _SpaceOverviewPageState extends State<SpaceOverviewPage> {
+  final _searchController = TextEditingController();
+  bool _isSearchOpen = false;
+
+  String get spaceId => widget.spaceId;
+  Space? get space => widget.space;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,39 +104,70 @@ class SpaceOverviewPage extends StatelessWidget {
             for (final spot in overview.storageSpots) spot.id: spot,
           };
 
-          // While selecting, back clears the selection instead of leaving.
+          final products = state.visibleProducts;
+
+          // While selecting, back clears the selection instead of leaving;
+          // with the search open, back closes it.
           return PopScope(
-            canPop: !state.isSelecting,
+            canPop: !state.isSelecting && !_isSearchOpen,
             onPopInvokedWithResult: (didPop, _) {
               if (didPop) return;
-              context.read<SpaceOverviewBloc>().add(
-                const ProductSelectionCleared(),
-              );
+              if (state.isSelecting) {
+                context.read<SpaceOverviewBloc>().add(
+                  const ProductSelectionCleared(),
+                );
+              } else {
+                _closeSearch(context);
+              }
             },
             child: Scaffold(
               appBar: state.isSelecting
                   ? _buildSelectionAppBar(context, state)
+                  : _isSearchOpen
+                  ? _buildSearchAppBar(context)
                   : _buildAppBar(
                       context,
                       '${overview.emoji} ${overview.name}',
-                      actions: [_buildInviteAction()],
+                      actions: [
+                        IconButton(
+                          icon: const Icon(Icons.search),
+                          tooltip: 'Search',
+                          onPressed: () => setState(() => _isSearchOpen = true),
+                        ),
+                        _buildInviteAction(),
+                      ],
                     ),
               body: overview.productResults.isEmpty
                   ? const Center(child: Text('No products yet.'))
-                  : ListView(
-                      padding: const EdgeInsets.all(8),
+                  : Column(
                       children: [
-                        for (final product in overview.productResults)
-                          _OverviewProductTile(
-                            product: product,
-                            storageSpot:
-                                storageSpotsById[product.storageSpotId],
-                            isSelecting: state.isSelecting,
-                            isSelected: state.selectedProductIds.contains(
-                              product.id,
-                            ),
-                            onOpen: () => _openEditor(context, product),
+                        if (overview.storageSpots.isNotEmpty)
+                          _StorageSpotFilterBar(
+                            storageSpots: overview.storageSpots,
+                            selectedId: state.storageSpotFilter,
+                            enabled: !state.isBusy,
                           ),
+                        Expanded(
+                          child: products.isEmpty
+                              ? const Center(child: Text('No products match.'))
+                              : ListView(
+                                  padding: const EdgeInsets.all(8),
+                                  children: [
+                                    for (final product in products)
+                                      _OverviewProductTile(
+                                        product: product,
+                                        storageSpot:
+                                            storageSpotsById[product
+                                                .storageSpotId],
+                                        isSelecting: state.isSelecting,
+                                        isSelected: state.selectedProductIds
+                                            .contains(product.id),
+                                        onOpen: () =>
+                                            _openEditor(context, product),
+                                      ),
+                                  ],
+                                ),
+                        ),
                       ],
                     ),
             ),
@@ -156,6 +206,37 @@ class SpaceOverviewPage extends StatelessWidget {
               onPressed: () => context.go('/home'),
             ),
     );
+  }
+
+  AppBar _buildSearchAppBar(BuildContext context) {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        tooltip: 'Close search',
+        onPressed: () => _closeSearch(context),
+      ),
+      title: TextField(
+        controller: _searchController,
+        autofocus: true,
+        textInputAction: TextInputAction.search,
+        decoration: const InputDecoration(
+          hintText: 'Search products',
+          prefixIcon: Icon(Icons.search),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        ),
+        onChanged: (query) => context.read<SpaceOverviewBloc>().add(
+          ProductSearchQueryChanged(query),
+        ),
+      ),
+    );
+  }
+
+  /// Closing the search also clears it, so every product shows again.
+  void _closeSearch(BuildContext context) {
+    _searchController.clear();
+    setState(() => _isSearchOpen = false);
+    context.read<SpaceOverviewBloc>().add(const ProductSearchQueryChanged(''));
   }
 
   /// Each tap creates a new invitation; the result is shown by
@@ -398,6 +479,55 @@ String _formatDate(DateTime date) {
   final month = date.month.toString().padLeft(2, '0');
   final day = date.day.toString().padLeft(2, '0');
   return '${date.year}-$month-$day';
+}
+
+/// "All" and one chip per storage spot of the space; the selected one
+/// filters the list.
+class _StorageSpotFilterBar extends StatelessWidget {
+  const _StorageSpotFilterBar({
+    required this.storageSpots,
+    required this.selectedId,
+    required this.enabled,
+  });
+
+  final List<StorageSpot> storageSpots;
+  final String? selectedId;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    void select(String? storageSpotId) => context.read<SpaceOverviewBloc>().add(
+      StorageSpotFilterSelected(storageSpotId),
+    );
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        children: [
+          ChoiceChip(
+            label: const Text('All'),
+            showCheckmark: false,
+            selected: selectedId == null,
+            onSelected: enabled ? (_) => select(null) : null,
+          ),
+          for (final spot in storageSpots) ...[
+            const SizedBox(width: 8),
+            ChoiceChip(
+              avatar: StorageSpotTypeIcon(type: spot.type, size: 20),
+              label: Text(spot.name),
+              showCheckmark: false,
+              selected: selectedId == spot.id,
+              // Tapping the selected spot again goes back to all.
+              onSelected: enabled
+                  ? (selected) => select(selected ? spot.id : null)
+                  : null,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// Outside selection mode a tap opens the editor ([onOpen]) and a long press

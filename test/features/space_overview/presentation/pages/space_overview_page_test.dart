@@ -339,7 +339,13 @@ void main() {
 
       expect(find.text('🏠 Kitchen'), findsOneWidget);
       expect(find.text('Milk'), findsOneWidget);
-      expect(find.textContaining('Fridge'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Milk'),
+          matching: find.text('Fridge'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Bread'), findsOneWidget);
       expect(find.textContaining('No suggested spot'), findsOneWidget);
     },
@@ -925,7 +931,13 @@ void main() {
       ]);
       expect(find.text('Edit product'), findsNothing);
       expect(rowTitles(tester), ['Bread', 'Oat milk']);
-      expect(find.textContaining('Fridge'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Oat milk'),
+          matching: find.text('Fridge'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('25 Sep 2026'), findsOneWidget);
       expect(find.text('Product updated'), findsOneWidget);
 
@@ -1085,9 +1097,14 @@ void main() {
     ) async {
       await tester.tap(find.byTooltip('Move'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(space));
+      // The filter chips behind the sheet show the same spot names.
+      Finder inSheet(String text) => find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text(text),
+      );
+      await tester.tap(inSheet(space));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(spot));
+      await tester.tap(inSheet(spot));
       await tester.pumpAndSettle();
     }
 
@@ -1469,6 +1486,179 @@ void main() {
         find.text("You're not a participant of this space."),
         findsOneWidget,
       );
+    });
+  });
+
+  group('searching and filtering', () {
+    PersistedProduct product(String id, String name, String? spotId) =>
+        PersistedProduct(
+          id: id,
+          productName: name,
+          expirationDate: DateTime(2026, 10, 1),
+          storageSpotId: spotId,
+          productType: 'OTHER',
+          priceAmount: null,
+          currency: null,
+        );
+
+    const pantry = StorageSpot(
+      id: 'spot-2',
+      name: 'Pantry',
+      type: StorageSpotType.pantry,
+    );
+
+    final overview = SpaceOverview(
+      id: 'space-1',
+      name: 'Kitchen',
+      emoji: '🏠',
+      storageSpots: const [_fridge, pantry],
+      productResults: [
+        product('product-1', 'Whole milk', 'spot-1'),
+        product('product-2', 'Yogurt', 'spot-1'),
+        product('product-3', 'Oat milk', 'spot-2'),
+        product('product-4', 'Rice', null),
+      ],
+    );
+
+    List<String> rowTitles(WidgetTester tester) => [
+      for (final tile in tester.widgetList<ListTile>(find.byType(ListTile)))
+        ((tile.title as Text).data)!,
+    ];
+
+    Finder chip(String label) => find.widgetWithText(ChoiceChip, label);
+
+    Future<SpaceOverviewBloc> pumpLoaded(WidgetTester tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(overview)]));
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+      return bloc;
+    }
+
+    testWidgets('the search icon opens a field that filters by name; closing '
+        'it shows every product again', (tester) async {
+      final bloc = await pumpLoaded(tester);
+      expect(find.byType(TextField), findsNothing);
+
+      await tester.tap(find.byTooltip('Search'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('🏠 Kitchen'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), 'MILK');
+      await tester.pumpAndSettle();
+      expect(rowTitles(tester), ['Whole milk', 'Oat milk']);
+
+      await tester.tap(find.byTooltip('Close search'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('🏠 Kitchen'), findsOneWidget);
+      expect(bloc.state.searchQuery, '');
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt', 'Oat milk', 'Rice']);
+    });
+
+    testWidgets('back closes the search instead of leaving the page', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(overview)]));
+      final router = _buildRouter(bloc, initial: '/home');
+      addTearDown(router.dispose);
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      router.push('/space-overview/space-1', extra: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Search'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'rice');
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      expect(bloc.state.searchQuery, '');
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt', 'Oat milk', 'Rice']);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsOneWidget);
+    });
+
+    testWidgets('a chip per storage spot, plus All, filters the list', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+      expect(tester.widget<ChoiceChip>(chip('All')).selected, isTrue);
+
+      await tester.tap(chip('Fridge'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ChoiceChip>(chip('Fridge')).selected, isTrue);
+      expect(tester.widget<ChoiceChip>(chip('All')).selected, isFalse);
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt']);
+
+      await tester.tap(chip('Pantry'));
+      await tester.pumpAndSettle();
+      expect(rowTitles(tester), ['Oat milk']);
+
+      await tester.tap(chip('All'));
+      await tester.pumpAndSettle();
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt', 'Oat milk', 'Rice']);
+    });
+
+    testWidgets('tapping the selected spot again shows all products', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      await tester.tap(chip('Fridge'));
+      await tester.pumpAndSettle();
+      await tester.tap(chip('Fridge'));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<ChoiceChip>(chip('All')).selected, isTrue);
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt', 'Oat milk', 'Rice']);
+    });
+
+    testWidgets('search and spot combine; no match shows a message', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      await tester.tap(chip('Pantry'));
+      await tester.tap(find.byTooltip('Search'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'yogurt');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListTile), findsNothing);
+      expect(find.text('No products match.'), findsOneWidget);
+      // The chips stay, so the filter can be changed.
+      expect(chip('All'), findsOneWidget);
+    });
+
+    testWidgets('a space without storage spots shows no chips', (tester) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([
+          Right(
+            SpaceOverview(
+              id: 'space-1',
+              name: 'Kitchen',
+              emoji: '🏠',
+              storageSpots: const [],
+              productResults: [product('product-4', 'Rice', null)],
+            ),
+          ),
+        ]),
+      );
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.text('Rice'), findsOneWidget);
     });
   });
 }

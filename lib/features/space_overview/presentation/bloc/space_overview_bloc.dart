@@ -32,6 +32,8 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     on<SelectedProductsDeleteSubmitted>(_onDeleteSubmitted);
     on<ProductUpdated>(_onProductUpdated);
     on<SelectedProductMoveSubmitted>(_onMoveSubmitted);
+    on<ProductSearchQueryChanged>(_onSearchQueryChanged);
+    on<StorageSpotFilterSelected>(_onStorageSpotFilterSelected);
   }
 
   Future<void> _onRequested(
@@ -76,6 +78,43 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     if (state.isBusy) return;
 
     emit(state.copyWith(selectedProductIds: const {}));
+  }
+
+  void _onSearchQueryChanged(
+    ProductSearchQueryChanged event,
+    Emitter<SpaceOverviewState> emit,
+  ) {
+    if (state.isBusy) return;
+
+    _emitFiltered(emit, state.copyWith(searchQuery: event.query));
+  }
+
+  void _onStorageSpotFilterSelected(
+    StorageSpotFilterSelected event,
+    Emitter<SpaceOverviewState> emit,
+  ) {
+    if (state.isBusy) return;
+
+    _emitFiltered(
+      emit,
+      state.copyWith(storageSpotFilter: () => event.storageSpotId),
+    );
+  }
+
+  /// Hidden products leave the selection, so a delete or a move only ever
+  /// acts on products the user can see.
+  void _emitFiltered(
+    Emitter<SpaceOverviewState> emit,
+    SpaceOverviewState filtered,
+  ) {
+    final visibleIds = {for (final p in filtered.visibleProducts) p.id};
+    emit(
+      filtered.copyWith(
+        selectedProductIds: Set.unmodifiable(
+          filtered.selectedProductIds.intersection(visibleIds),
+        ),
+      ),
+    );
   }
 
   /// One selected product uses the single endpoint; two or more, the batch
