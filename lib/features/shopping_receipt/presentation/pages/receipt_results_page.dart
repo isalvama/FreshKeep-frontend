@@ -3,7 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../resources/assets.dart';
 import '../../../../shared/widgets/expiration_date_badge.dart';
+import '../../../../shared/widgets/loading_animation.dart';
 import '../../../../shared/widgets/product_type_icon.dart';
 import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../spaces/domain/entities/storage_spot.dart';
@@ -70,140 +72,162 @@ class ReceiptResultsPage extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(title: const Text('Receipt Details')),
-          body: ListView(
-            padding: const EdgeInsets.all(16),
+          body: Stack(
             children: [
-              Row(
+              ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                 children: [
-                  Expanded(
-                    child: Text(
-                      state.storeName ?? result.storeName,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    tooltip: 'Edit store name',
-                    onPressed: isSubmitting
-                        ? null
-                        : () => _editStoreName(
-                            context,
-                            state.storeName ?? result.storeName,
-                          ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Text(
-                    _formatDate(
-                      state.shoppingDate ?? result.purchaseShoppingDate,
-                    ),
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.calendar_today),
-                    tooltip: 'Edit shopping date',
-                    onPressed: isSubmitting
-                        ? null
-                        : () => _editShoppingDate(
-                            context,
-                            state.shoppingDate ?? result.purchaseShoppingDate,
-                          ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (flaggedIndices.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.08),
-                    borderRadius: kCornerBorderRadius,
-                    border: Border.all(
-                      color: Colors.red.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: Column(
-                      children: [
-                        for (final index in flaggedIndices)
-                          _ProductTile(
-                            product: result.productExtractions[index],
-                            expirationDate: state.displayedExpirationDate(
-                              index,
-                            ),
-                            storageSpot:
-                                storageSpotsById[result
-                                    .productExtractions[index]
-                                    .suggestedStorageSpotId],
-                            selected: state.selectedForReprocess.contains(
-                              index,
-                            ),
-                            onChanged: (_) => context
-                                .read<ShoppingReceiptBloc>()
-                                .add(ReprocessSelectionToggled(index)),
-                            edited: state.editedExpirationDates.containsKey(
-                              index,
-                            ),
-                            onEditExpirationDate: isSubmitting
-                                ? null
-                                : () => _editExpirationDate(
-                                    context,
-                                    index,
-                                    state,
-                                  ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              for (final index in restIndices)
-                _ProductTile(
-                  product: result.productExtractions[index],
-                  expirationDate: state.displayedExpirationDate(index),
-                  storageSpot:
-                      storageSpotsById[result
-                          .productExtractions[index]
-                          .suggestedStorageSpotId],
-                  selected: state.selectedForReprocess.contains(index),
-                  onChanged: (_) => context.read<ShoppingReceiptBloc>().add(
-                    ReprocessSelectionToggled(index),
-                  ),
-                  edited: state.editedExpirationDates.containsKey(index),
-                  onEditExpirationDate: isSubmitting
-                      ? null
-                      : () => _editExpirationDate(context, index, state),
-                ),
-              const SizedBox(height: 32),
-              if (isSubmitting) ...[
-                const LinearProgressIndicator(),
-                const SizedBox(height: 16),
-              ],
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () => context.read<ShoppingReceiptBloc>().add(
-                          const ReceiptConfirmSubmitted(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          state.storeName ?? result.storeName,
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                  child: const Text('OK'),
-                ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        tooltip: 'Edit store name',
+                        onPressed: isSubmitting
+                            ? null
+                            : () => _editStoreName(
+                                context,
+                                state.storeName ?? result.storeName,
+                              ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Text(
+                        _formatDate(
+                          state.shoppingDate ?? result.purchaseShoppingDate,
+                        ),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.calendar_today),
+                        tooltip: 'Edit shopping date',
+                        onPressed: isSubmitting
+                            ? null
+                            : () => _editShoppingDate(
+                                context,
+                                state.shoppingDate ??
+                                    result.purchaseShoppingDate,
+                              ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (flaggedIndices.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.08),
+                        borderRadius: kCornerBorderRadius,
+                        border: Border.all(
+                          color: Colors.red.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: Column(
+                          children: [
+                            for (final index in flaggedIndices)
+                              _ProductTile(
+                                product: result.productExtractions[index],
+                                expirationDate: state.displayedExpirationDate(
+                                  index,
+                                ),
+                                storageSpot:
+                                    storageSpotsById[result
+                                        .productExtractions[index]
+                                        .suggestedStorageSpotId],
+                                selected: state.selectedForReprocess.contains(
+                                  index,
+                                ),
+                                onChanged: (_) => context
+                                    .read<ShoppingReceiptBloc>()
+                                    .add(ReprocessSelectionToggled(index)),
+                                edited: state.editedExpirationDates.containsKey(
+                                  index,
+                                ),
+                                onEditExpirationDate: isSubmitting
+                                    ? null
+                                    : () => _editExpirationDate(
+                                        context,
+                                        index,
+                                        state,
+                                      ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  for (final index in restIndices)
+                    _ProductTile(
+                      product: result.productExtractions[index],
+                      expirationDate: state.displayedExpirationDate(index),
+                      storageSpot:
+                          storageSpotsById[result
+                              .productExtractions[index]
+                              .suggestedStorageSpotId],
+                      selected: state.selectedForReprocess.contains(index),
+                      onChanged: (_) => context.read<ShoppingReceiptBloc>().add(
+                        ReprocessSelectionToggled(index),
+                      ),
+                      edited: state.editedExpirationDates.containsKey(index),
+                      onEditExpirationDate: isSubmitting
+                          ? null
+                          : () => _editExpirationDate(context, index, state),
+                    ),
+                  const SizedBox(height: 32),
+                  // Reprocessing covers the page with an animation instead.
+                  if (status is ShoppingReceiptConfirming) ...[
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: 16),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isSubmitting
+                          ? null
+                          : () => context.read<ShoppingReceiptBloc>().add(
+                              const ReceiptConfirmSubmitted(),
+                            ),
+                      child: const Text('OK'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed:
+                          isSubmitting || state.selectedForReprocess.isEmpty
+                          ? null
+                          : () => _submitReprocess(
+                              context,
+                              state.hasPendingEdits,
+                            ),
+                      child: const Text('Reprocess selected products'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: isSubmitting || state.selectedForReprocess.isEmpty
-                      ? null
-                      : () => _submitReprocess(context, state.hasPendingEdits),
-                  child: const Text('Reprocess selected products'),
+              if (status is ShoppingReceiptReprocessing)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    child: const Center(
+                      child: LoadingAnimation(
+                        asset: Assets.receiptReprocessingAnimation,
+                        message: 'Reviewing the selected products',
+                      ),
+                    ),
+                  ),
                 ),
-              ),
             ],
           ),
         );

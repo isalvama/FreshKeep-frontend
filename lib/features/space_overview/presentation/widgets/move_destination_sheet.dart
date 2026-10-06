@@ -104,7 +104,11 @@ class _MoveDestinationSheetState extends State<_MoveDestinationSheet> {
           )
         else
           Flexible(
+            // Each level has its own key so its rows are built fresh rather
+            // than reused from the other level: a reused ListTile animates
+            // its title style, and the two levels' styles can't be blended.
             child: ListView(
+              key: const ValueKey('spaces'),
               shrinkWrap: true,
               children: [
                 for (final space in spaces)
@@ -144,6 +148,7 @@ class _MoveDestinationSheetState extends State<_MoveDestinationSheet> {
         ),
         Flexible(
           child: ListView(
+            key: ValueKey('spots-${space.id}'),
             shrinkWrap: true,
             children: [
               for (final spot in space.storageSpots)

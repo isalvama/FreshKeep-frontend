@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fresh_keep_frontend/core/theme/app_theme.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/entities/move_destination.dart';
@@ -83,6 +84,9 @@ Future<void> _pumpOpener(
     BlocProvider<SpacesBloc>.value(
       value: bloc,
       child: MaterialApp(
+        // The app's theme: its list tile title style differs from the 18px
+        // one the space rows use, which once broke switching levels.
+        theme: AppTheme.light,
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(

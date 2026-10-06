@@ -16,6 +16,8 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_results_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
+import 'package:fresh_keep_frontend/resources/assets.dart';
+import 'package:fresh_keep_frontend/shared/widgets/loading_animation.dart';
 import 'package:go_router/go_router.dart';
 
 class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
@@ -789,6 +791,65 @@ void main() {
 
       expect(find.text('Discard your edits?'), findsNothing);
       expect(bloc.state.status, isA<ShoppingReceiptReprocessing>());
+    });
+  });
+
+  group('reprocessing animation', () {
+    Finder reprocessButton() =>
+        find.widgetWithText(ElevatedButton, 'Reprocess selected products');
+
+    testWidgets('while reprocessing, the page is covered by the reprocessing '
+        'animation, with no progress bar', (tester) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+      bloc.add(const ReprocessSelectionToggled(1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(reprocessButton());
+      await tester.pump();
+
+      final animation = tester.widget<LoadingAnimation>(
+        find.byType(LoadingAnimation),
+      );
+      expect(animation.asset, Assets.receiptReprocessingAnimation);
+      expect(
+        find.bySemanticsLabel('Reviewing the selected products'),
+        findsOneWidget,
+      );
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+    });
+
+    testWidgets('the animation goes away when reprocessing fails', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc(
+        reprocessResult: const Left(
+          ShoppingReceiptServerFailure('Something went wrong.'),
+        ),
+      );
+      await _pumpResultsPage(tester, bloc);
+      bloc.add(const ReprocessSelectionToggled(1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(reprocessButton());
+      await tester.pump();
+      await tester.pump();
+
+      expect(bloc.state.status, isA<ShoppingReceiptReprocessFailure>());
+      expect(find.byType(LoadingAnimation), findsNothing);
+    });
+
+    testWidgets('confirming shows the progress bar, not the animation', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+      await tester.pump();
+
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(LoadingAnimation), findsNothing);
     });
   });
 }

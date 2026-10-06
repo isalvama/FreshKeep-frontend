@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../resources/assets.dart';
+import '../../../../shared/widgets/loading_animation.dart';
 import '../bloc/shopping_receipt_bloc.dart';
 
 class ReceiptProcessingPage extends StatelessWidget {
@@ -23,7 +25,12 @@ class ReceiptProcessingPage extends StatelessWidget {
             context.push('/process-receipt/error');
           }
         },
-        child: const Center(child: CircularProgressIndicator()),
+        child: const Center(
+          child: LoadingAnimation(
+            asset: Assets.receiptProcessingAnimation,
+            message: 'Reading your receipt',
+          ),
+        ),
       ),
     );
   }
