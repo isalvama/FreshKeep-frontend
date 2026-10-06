@@ -35,4 +35,11 @@ abstract class Assets {
 
   // Other
   static const userIcon = '$_images/user.png';
+
+  static const _animations = 'assets/animations';
+
+  // Animations (Lottie)
+  static const receiptProcessingAnimation = '$_animations/food_processing.json';
+  static const receiptReprocessingAnimation =
+      '$_animations/review_processing.json';
 }
