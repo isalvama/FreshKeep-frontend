@@ -16,6 +16,8 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_results_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
+import 'package:fresh_keep_frontend/resources/assets.dart';
+import 'package:fresh_keep_frontend/shared/widgets/loading_animation.dart';
 import 'package:go_router/go_router.dart';
 
 class _StubShoppingReceiptRepository implements ShoppingReceiptRepository {
@@ -249,10 +251,13 @@ void main() {
 
       await _pumpResultsPage(tester, bloc);
 
-      final milkTile = tester.widget<CheckboxListTile>(
-        find.widgetWithText(CheckboxListTile, 'Milk'),
+      final milkCheckbox = tester.widget<Checkbox>(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Milk'),
+          matching: find.byType(Checkbox),
+        ),
       );
-      expect(milkTile.value, isFalse);
+      expect(milkCheckbox.value, isFalse);
 
       await tester.tap(find.text('Milk'));
       await tester.pump();
@@ -577,7 +582,7 @@ void main() {
     DateTime today() => DateUtils.dateOnly(DateTime.now());
 
     Finder tileOf(String productName) =>
-        find.widgetWithText(CheckboxListTile, productName);
+        find.widgetWithText(ListTile, productName);
 
     Finder editIconOf(String productName) => find.descendant(
       of: tileOf(productName),
@@ -656,13 +661,12 @@ void main() {
 
       expect(bloc.state.editedExpirationDates, {1: DateTime(2026, 9, 30)});
       expect(find.textContaining('edited'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: tileOf('Bread'),
-          matching: find.textContaining('exp. 2026-09-30 · edited'),
-        ),
-        findsOneWidget,
-      );
+      for (final text in ['30 Sep 2026', 'edited']) {
+        expect(
+          find.descendant(of: tileOf('Bread'), matching: find.text(text)),
+          findsOneWidget,
+        );
+      }
 
       await tester.tap(editIconOf('Bread'));
       await tester.pumpAndSettle();
@@ -682,9 +686,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Milk 09-15 and Eggs 09-25 shift by -3 days; Bread keeps 09-30.
-      expect(find.textContaining('exp. 2026-09-12'), findsOneWidget);
-      expect(find.textContaining('exp. 2026-09-22'), findsOneWidget);
-      expect(find.textContaining('exp. 2026-09-30'), findsOneWidget);
+      expect(find.text('12 Sep 2026'), findsOneWidget);
+      expect(find.text('22 Sep 2026'), findsOneWidget);
+      expect(find.text('30 Sep 2026'), findsOneWidget);
     });
 
     testWidgets(
@@ -787,6 +791,65 @@ void main() {
 
       expect(find.text('Discard your edits?'), findsNothing);
       expect(bloc.state.status, isA<ShoppingReceiptReprocessing>());
+    });
+  });
+
+  group('reprocessing animation', () {
+    Finder reprocessButton() =>
+        find.widgetWithText(ElevatedButton, 'Reprocess selected products');
+
+    testWidgets('while reprocessing, the page is covered by the reprocessing '
+        'animation, with no progress bar', (tester) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+      bloc.add(const ReprocessSelectionToggled(1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(reprocessButton());
+      await tester.pump();
+
+      final animation = tester.widget<LoadingAnimation>(
+        find.byType(LoadingAnimation),
+      );
+      expect(animation.asset, Assets.receiptReprocessingAnimation);
+      expect(
+        find.bySemanticsLabel('Reviewing the selected products'),
+        findsOneWidget,
+      );
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+    });
+
+    testWidgets('the animation goes away when reprocessing fails', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc(
+        reprocessResult: const Left(
+          ShoppingReceiptServerFailure('Something went wrong.'),
+        ),
+      );
+      await _pumpResultsPage(tester, bloc);
+      bloc.add(const ReprocessSelectionToggled(1));
+      await tester.pumpAndSettle();
+
+      await tester.tap(reprocessButton());
+      await tester.pump();
+      await tester.pump();
+
+      expect(bloc.state.status, isA<ShoppingReceiptReprocessFailure>());
+      expect(find.byType(LoadingAnimation), findsNothing);
+    });
+
+    testWidgets('confirming shows the progress bar, not the animation', (
+      tester,
+    ) async {
+      final bloc = await _buildSucceededBloc();
+      await _pumpResultsPage(tester, bloc);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'OK'));
+      await tester.pump();
+
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.byType(LoadingAnimation), findsNothing);
     });
   });
 }

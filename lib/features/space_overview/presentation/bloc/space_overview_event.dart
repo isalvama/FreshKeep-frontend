@@ -38,3 +38,17 @@ final class SelectedProductMoveSubmitted extends SpaceOverviewEvent {
 
   const SelectedProductMoveSubmitted(this.destination);
 }
+
+/// The search text changed; an empty [query] shows every product.
+final class ProductSearchQueryChanged extends SpaceOverviewEvent {
+  final String query;
+
+  const ProductSearchQueryChanged(this.query);
+}
+
+/// Shows only the products in [storageSpotId]; null shows all.
+final class StorageSpotFilterSelected extends SpaceOverviewEvent {
+  final String? storageSpotId;
+
+  const StorageSpotFilterSelected(this.storageSpotId);
+}

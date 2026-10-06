@@ -21,6 +21,7 @@ dependencies:
   image_picker: ^1.1.2
   share_plus: ^12.0.2
   app_links: ^7.2.1
+  lottie: ^3.6.1
 
 dev_dependencies:
   flutter_test:
@@ -30,3 +31,22 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/animations/
+
+  fonts:
+    - family: WorkSans
+      fonts:
+        - asset: assets/fonts/work_sans/WorkSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/work_sans/WorkSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/work_sans/WorkSans-SemiBold.ttf
+          weight: 600
+    - family: NunitoSans
+      fonts:
+        - asset: "assets/fonts/nunito_sans/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"
+        - asset: "assets/fonts/nunito_sans/NunitoSans-Italic-VariableFont_YTLC,opsz,wdth,wght.ttf"
+          style: italic

@@ -192,6 +192,24 @@ void main() {
       expect(atLimit.canSave, isTrue);
     });
 
+    for (final text in ['123', '-- 4 --', '🥛']) {
+      test('a name without a letter ("$text") is rejected', () async {
+        final state = await _stateAfter(_milk, [EditProductNameChanged(text)]);
+
+        expect(state.nameError, 'Name must contain at least one letter.');
+        expect(state.canSave, isFalse);
+      });
+    }
+
+    test('a name with any letter, including accented ones, is fine', () async {
+      final state = await _stateAfter(_milk, [
+        const EditProductNameChanged('7 Ñoquis'),
+      ]);
+
+      expect(state.nameError, isNull);
+      expect(state.canSave, isTrue);
+    });
+
     for (final text in ['abc', '0', '-1', '0,0']) {
       test('amount "$text" is rejected', () async {
         final state = await _stateAfter(_milk, [

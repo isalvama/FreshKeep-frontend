@@ -272,6 +272,25 @@ void main() {
     expect(withoutSession.location, '/home');
   });
 
+  testWidgets('the Account button on Home opens Account, and logging out '
+      'there lands on Login', (tester) async {
+    final harness = _Harness(hasSession: true);
+    await harness.pump(tester);
+    await harness.start(tester);
+    expect(harness.location, '/home');
+
+    await tester.tap(find.byTooltip('Account'));
+    await _settle(tester);
+    expect(harness.location, '/account');
+    expect(find.text('ana@example.com'), findsOneWidget);
+
+    await tester.tap(find.text('Log out'));
+    await _settle(tester);
+
+    expect(harness.location, '/login');
+    expect(harness.router.canPop(), isFalse);
+  });
+
   testWidgets('while logged in, a link opens the join page directly', (
     tester,
   ) async {

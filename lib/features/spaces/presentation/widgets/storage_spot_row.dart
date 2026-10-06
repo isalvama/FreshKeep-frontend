@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../domain/entities/storage_spot_type.dart';
 import 'storage_spot_type_sheet.dart';
 
@@ -76,7 +76,6 @@ class _StorageSpotRowWidgetState extends State<StorageSpotRowWidget> {
                   onChanged: widget.onNameChanged,
                   decoration: InputDecoration(
                     hintText: 'Spot name',
-                    border: OutlineInputBorder(borderRadius: kCornerBorderRadius),
                     errorText: widget.errorText,
                   ),
                 ),
@@ -84,10 +83,14 @@ class _StorageSpotRowWidgetState extends State<StorageSpotRowWidget> {
               const SizedBox(width: 8),
               OutlinedButton(
                 onPressed: _pickType,
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: kCornerBorderRadius),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    StorageSpotTypeIcon(type: widget.type, size: 24),
+                    const SizedBox(width: 8),
+                    Text(storageSpotTypeLabel(widget.type)),
+                  ],
                 ),
-                child: Text(storageSpotTypeLabel(widget.type)),
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline),

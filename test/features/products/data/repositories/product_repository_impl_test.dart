@@ -436,6 +436,16 @@ void main() {
         isA<ProductServerFailure>(),
         'Something went wrong on the server. Try again later.',
       ),
+      502: (
+        isA<ProductServerFailure>(),
+        "The new expiration date couldn't be calculated right now. "
+            'Please try again in a moment.',
+      ),
+      503: (
+        isA<ProductServerFailure>(),
+        "The new expiration date couldn't be calculated right now. "
+            'Please try again in a moment.',
+      ),
     };
 
     for (final entry in cases.entries) {
@@ -468,21 +478,21 @@ void main() {
       });
     }
 
-    test('an AI Server Error 400 shows the backend detail', () async {
+    test('an AI Server Error 503 shows the backend detail', () async {
       final failure = (await move(
         _buildRepository(
           _RecordingAdapter(
-            statusCode: 400,
+            statusCode: 503,
             body: {
               'title': 'AI Server Error',
-              'status': 400,
+              'status': 503,
               'detail': 'The AI service is temporarily unavailable.',
             },
           ),
         ),
       )).getLeft().toNullable();
 
-      expect(failure, isA<ProductValidationFailure>());
+      expect(failure, isA<ProductServerFailure>());
       expect(failure!.message, 'The AI service is temporarily unavailable.');
     });
 

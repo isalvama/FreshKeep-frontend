@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../shared/widgets/product_type_icon.dart';
 import '../../domain/entities/currency.dart';
 import '../../domain/entities/product_type.dart';
 import '../bloc/edit_product_bloc.dart';
@@ -114,11 +115,14 @@ class _EditProductPageState extends State<EditProductPage> {
                   decoration: const InputDecoration(labelText: 'Type'),
                   hint: _unknownHint(state.original.productType),
                   disabledHint: state.productType != null
-                      ? Text(state.productType!.label)
+                      ? _ProductTypeOption(state.productType!)
                       : _unknownHint(state.original.productType),
                   items: [
                     for (final type in ProductType.values)
-                      DropdownMenuItem(value: type, child: Text(type.label)),
+                      DropdownMenuItem(
+                        value: type,
+                        child: _ProductTypeOption(type),
+                      ),
                   ],
                   onChanged: enabled
                       ? (type) => bloc.add(EditProductTypeChanged(type!))
@@ -240,4 +244,22 @@ String _formatDate(DateTime date) {
   final month = date.month.toString().padLeft(2, '0');
   final day = date.day.toString().padLeft(2, '0');
   return '${date.year}-$month-$day';
+}
+
+/// A product type's icon and label, for the Type dropdown.
+class _ProductTypeOption extends StatelessWidget {
+  const _ProductTypeOption(this.type);
+
+  final ProductType type;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        ProductTypeIcon(type: type, size: 24),
+        const SizedBox(width: 12),
+        Flexible(child: Text(type.label, overflow: TextOverflow.ellipsis)),
+      ],
+    );
+  }
 }

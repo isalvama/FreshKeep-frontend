@@ -32,6 +32,8 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     on<SelectedProductsDeleteSubmitted>(_onDeleteSubmitted);
     on<ProductUpdated>(_onProductUpdated);
     on<SelectedProductMoveSubmitted>(_onMoveSubmitted);
+    on<ProductSearchQueryChanged>(_onSearchQueryChanged);
+    on<StorageSpotFilterSelected>(_onStorageSpotFilterSelected);
   }
 
   Future<void> _onRequested(
@@ -78,6 +80,43 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     emit(state.copyWith(selectedProductIds: const {}));
   }
 
+  void _onSearchQueryChanged(
+    ProductSearchQueryChanged event,
+    Emitter<SpaceOverviewState> emit,
+  ) {
+    if (state.isBusy) return;
+
+    _emitFiltered(emit, state.copyWith(searchQuery: event.query));
+  }
+
+  void _onStorageSpotFilterSelected(
+    StorageSpotFilterSelected event,
+    Emitter<SpaceOverviewState> emit,
+  ) {
+    if (state.isBusy) return;
+
+    _emitFiltered(
+      emit,
+      state.copyWith(storageSpotFilter: () => event.storageSpotId),
+    );
+  }
+
+  /// Hidden products leave the selection, so a delete or a move only ever
+  /// acts on products the user can see.
+  void _emitFiltered(
+    Emitter<SpaceOverviewState> emit,
+    SpaceOverviewState filtered,
+  ) {
+    final visibleIds = {for (final p in filtered.visibleProducts) p.id};
+    emit(
+      filtered.copyWith(
+        selectedProductIds: Set.unmodifiable(
+          filtered.selectedProductIds.intersection(visibleIds),
+        ),
+      ),
+    );
+  }
+
   /// One selected product uses the single endpoint; two or more, the batch
   /// one. The batch is all-or-nothing, so success means exactly the
   /// selected products are gone and they can be pruned without a refetch.
@@ -118,8 +157,8 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
   }
 
   /// The PATCH response has no `storageSpotId`, so the one already in the
-  /// list is kept. The list stays sorted soonest-to-expire first, like the
-  /// backend returns it.
+  /// list is kept. The list stays sorted soonest-to-expire first, then by
+  /// name, like the backend returns it.
   void _onProductUpdated(
     ProductUpdated event,
     Emitter<SpaceOverviewState> emit,
@@ -241,12 +280,15 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
     );
   }
 
-  /// Stable: products with the same date keep their current order.
+  /// Same order as the backend: by date, then by name. Stable for products
+  /// with the same date and name.
   List<PersistedProduct> _sortedByExpiration(List<PersistedProduct> products) {
     final indexed = products.indexed.toList()
       ..sort((a, b) {
         final byDate = a.$2.expirationDate.compareTo(b.$2.expirationDate);
-        return byDate != 0 ? byDate : a.$1.compareTo(b.$1);
+        if (byDate != 0) return byDate;
+        final byName = a.$2.productName.compareTo(b.$2.productName);
+        return byName != 0 ? byName : a.$1.compareTo(b.$1);
       });
     return [for (final (_, product) in indexed) product];
   }

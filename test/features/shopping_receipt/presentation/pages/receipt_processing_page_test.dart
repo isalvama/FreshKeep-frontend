@@ -15,6 +15,8 @@ import 'package:fresh_keep_frontend/features/shopping_receipt/domain/usecases/re
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/bloc/shopping_receipt_bloc.dart';
 import 'package:fresh_keep_frontend/features/shopping_receipt/presentation/pages/receipt_processing_page.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
+import 'package:fresh_keep_frontend/resources/assets.dart';
+import 'package:fresh_keep_frontend/shared/widgets/loading_animation.dart';
 import 'package:go_router/go_router.dart';
 
 class _PendingShoppingReceiptRepository implements ShoppingReceiptRepository {
@@ -161,14 +163,19 @@ Future<void> _pumpProcessingPage(
 }
 
 void main() {
-  testWidgets('shows a loading indicator while processing', (tester) async {
+  testWidgets('shows the processing animation and a message while '
+      'processing', (tester) async {
     final bloc = _buildReadyBloc(_PendingShoppingReceiptRepository());
 
     await _pumpProcessingPage(tester, bloc);
     bloc.add(const ReceiptProcessingSubmitted());
     await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    final animation = tester.widget<LoadingAnimation>(
+      find.byType(LoadingAnimation),
+    );
+    expect(animation.asset, Assets.receiptProcessingAnimation);
+    expect(find.bySemanticsLabel('Reading your receipt'), findsOneWidget);
   });
 
   testWidgets('navigates to the results screen on success', (tester) async {

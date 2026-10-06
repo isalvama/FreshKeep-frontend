@@ -26,6 +26,7 @@ final class ProductSaveFailure extends ProductSaveStatus {
 
 class EditProductState extends Equatable {
   static const nameMaxLength = 30;
+  static final _letterPattern = RegExp(r'\p{L}', unicode: true);
 
   final PersistedProduct original;
 
@@ -85,6 +86,9 @@ class EditProductState extends Equatable {
     if (_trimmedName.isEmpty) return 'Name is required.';
     if (_trimmedName.length > nameMaxLength) {
       return 'Name must be at most $nameMaxLength characters.';
+    }
+    if (!_letterPattern.hasMatch(_trimmedName)) {
+      return 'Name must contain at least one letter.';
     }
     return null;
   }

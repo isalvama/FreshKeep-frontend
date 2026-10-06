@@ -480,9 +480,13 @@ void main() {
       ],
     );
 
-    UpdatedProduct update(String id, DateTime date) => UpdatedProduct(
+    UpdatedProduct update(
+      String id,
+      DateTime date, {
+      String name = 'Oat milk',
+    }) => UpdatedProduct(
       productId: id,
-      name: 'Oat milk',
+      name: name,
       expirationDate: date,
       productType: 'DAIRY',
       amount: 2.5,
@@ -539,11 +543,24 @@ void main() {
       await bloc.close();
     });
 
-    test('keeps the existing order for equal dates', () async {
+    test('orders equal dates by name, like the backend', () async {
       final bloc = await loaded();
 
-      // p3 moves onto p2's date: p2 was first, so it stays first.
+      // p3 moves onto p2's date as "Oat milk", which sorts before "Product p2".
       bloc.add(ProductUpdated(update('p3', DateTime(2026, 10, 2))));
+      await _settle();
+
+      expect(_productIds(bloc.state), ['p1', 'p3', 'p2']);
+
+      await bloc.close();
+    });
+
+    test('keeps the existing order for equal dates and names', () async {
+      final bloc = await loaded();
+
+      bloc.add(
+        ProductUpdated(update('p3', DateTime(2026, 10, 2), name: 'Product p2')),
+      );
       await _settle();
 
       expect(_productIds(bloc.state), ['p1', 'p2', 'p3']);
@@ -875,5 +892,158 @@ void main() {
 
       await bloc.close();
     });
+  });
+
+  group('search and storage spot filter', () {
+    PersistedProduct product(String id, String name, String? spotId) =>
+        PersistedProduct(
+          id: id,
+          productName: name,
+          expirationDate: DateTime(2026, 10, 1),
+          storageSpotId: spotId,
+          productType: 'OTHER',
+          priceAmount: null,
+          currency: null,
+        );
+
+    final overview = SpaceOverview(
+      id: 'space-1',
+      name: 'Kitchen',
+      emoji: '🏠',
+      storageSpots: const [],
+      productResults: [
+        product('f1', 'Whole milk', 'fridge'),
+        product('f2', 'Yogurt', 'fridge'),
+        product('p1', 'Oat MILK', 'pantry'),
+        product('n1', 'Rice', null),
+      ],
+    );
+
+    Future<SpaceOverviewBloc> loaded({
+      _RecordingProductRepository? products,
+    }) async {
+      final bloc = _buildBloc(
+        Right(overview),
+        productRepository: products ?? _RecordingProductRepository(),
+      );
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await bloc.stream.firstWhere((s) => s.status is SpaceOverviewLoadSuccess);
+      return bloc;
+    }
+
+    List<String> visibleIds(SpaceOverviewState state) =>
+        state.visibleProducts.map((p) => p.id).toList();
+
+    test('with no filter, every product is visible', () async {
+      final bloc = await loaded();
+
+      expect(visibleIds(bloc.state), ['f1', 'f2', 'p1', 'n1']);
+      expect(bloc.state.isFiltering, isFalse);
+
+      await bloc.close();
+    });
+
+    test('nothing is visible before the overview loads', () {
+      final bloc = _buildBloc(Right(overview));
+
+      expect(bloc.state.visibleProducts, isEmpty);
+
+      bloc.close();
+    });
+
+    test('the search matches part of the name, ignoring case and outer '
+        'spaces', () async {
+      final bloc = await loaded();
+
+      bloc.add(const ProductSearchQueryChanged('  milk '));
+      await _settle();
+
+      expect(visibleIds(bloc.state), ['f1', 'p1']);
+      expect(bloc.state.isFiltering, isTrue);
+
+      await bloc.close();
+    });
+
+    test(
+      'a storage spot shows only its products; null shows all again',
+      () async {
+        final bloc = await loaded();
+
+        bloc.add(const StorageSpotFilterSelected('fridge'));
+        await _settle();
+        expect(visibleIds(bloc.state), ['f1', 'f2']);
+
+        bloc.add(const StorageSpotFilterSelected(null));
+        await _settle();
+        expect(visibleIds(bloc.state), ['f1', 'f2', 'p1', 'n1']);
+        expect(bloc.state.storageSpotFilter, isNull);
+
+        await bloc.close();
+      },
+    );
+
+    test('search and storage spot combine', () async {
+      final bloc = await loaded();
+
+      bloc.add(const StorageSpotFilterSelected('fridge'));
+      bloc.add(const ProductSearchQueryChanged('milk'));
+      await _settle();
+
+      expect(visibleIds(bloc.state), ['f1']);
+
+      await bloc.close();
+    });
+
+    test('the filter does not change the loaded overview', () async {
+      final bloc = await loaded();
+
+      bloc.add(const ProductSearchQueryChanged('rice'));
+      await _settle();
+
+      expect(_productIds(bloc.state), ['f1', 'f2', 'p1', 'n1']);
+
+      await bloc.close();
+    });
+
+    test('products hidden by a filter leave the selection', () async {
+      final bloc = await loaded();
+      bloc.add(const ProductSelectionToggled('f1'));
+      bloc.add(const ProductSelectionToggled('p1'));
+      await _settle();
+
+      bloc.add(const StorageSpotFilterSelected('fridge'));
+      await _settle();
+      expect(bloc.state.selectedProductIds, {'f1'});
+
+      bloc.add(const ProductSearchQueryChanged('yog'));
+      await _settle();
+      expect(bloc.state.selectedProductIds, isEmpty);
+
+      await bloc.close();
+    });
+
+    test(
+      'filter changes are ignored while a deletion is in progress',
+      () async {
+        final products = _RecordingProductRepository()
+          ..pending = Completer<Either<ProductFailure, Unit>>();
+        final bloc = await loaded(products: products);
+        bloc.add(const ProductSelectionToggled('f1'));
+        bloc.add(const SelectedProductsDeleteSubmitted());
+        await _settle();
+
+        bloc.add(const ProductSearchQueryChanged('rice'));
+        bloc.add(const StorageSpotFilterSelected('pantry'));
+        await _settle();
+
+        expect(bloc.state.searchQuery, '');
+        expect(bloc.state.storageSpotFilter, isNull);
+        expect(bloc.state.selectedProductIds, {'f1'});
+
+        products.pending!.complete(const Right(unit));
+        await _settle();
+        await bloc.close();
+      },
+    );
   });
 }

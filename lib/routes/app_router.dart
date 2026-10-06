@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../core/deep_links/pending_invitation_store.dart';
 import '../core/di/service_locator.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
+import '../features/auth/presentation/pages/account_page.dart';
 import '../features/auth/presentation/pages/home_page.dart';
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/pages/register_page.dart';
@@ -59,6 +60,10 @@ GoRouter buildAppRouter(
         builder: (context, state) => const RegisterPage(),
       ),
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+      GoRoute(
+        path: '/account',
+        builder: (context, state) => const AccountPage(),
+      ),
       GoRoute(
         path: '/create-space',
         builder: (context, state) => const NewSpacePage(),

@@ -103,6 +103,15 @@ class ProductRepositoryImpl implements ProductRepository {
         return ProductServerFailure(
           detail ?? 'Something went wrong on the server. Try again later.',
         );
+      // Moving recalculates the expiration date with the AI, which answered
+      // with nothing usable (502) or couldn't be reached after retries (503).
+      case 502:
+      case 503:
+        return ProductServerFailure(
+          detail ??
+              "The new expiration date couldn't be calculated right now. "
+                  'Please try again in a moment.',
+        );
       default:
         return ProductNetworkFailure(
           e.message ?? 'Network error. Please check your connection.',

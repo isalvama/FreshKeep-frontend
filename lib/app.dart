@@ -10,6 +10,7 @@ import 'core/deep_links/invitation_link_listener.dart';
 import 'core/deep_links/pending_invitation_store.dart';
 import 'core/di/service_locator.dart';
 import 'core/network/dio_client.dart';
+import 'core/theme/app_theme.dart';
 import 'features/auth/data/datasources/auth_local_datasource.dart';
 import 'features/auth/data/datasources/auth_remote_datasource.dart';
 import 'features/auth/data/repositories/auth_repository_impl.dart';
@@ -110,10 +111,7 @@ class _AppState extends State<App> {
       ],
       child: AuthSessionListener(
         pendingInvitations: getIt<PendingInvitationStore>(),
-        child: MaterialApp.router(
-          routerConfig: _router,
-          theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
-        ),
+        child: MaterialApp.router(routerConfig: _router, theme: AppTheme.light),
       ),
     );
   }

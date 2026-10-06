@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/ui_constants.dart';
 import '../bloc/create_space_bloc.dart';
 import '../bloc/spaces_bloc.dart';
 import '../widgets/emoji_picker_button.dart';
@@ -125,9 +124,6 @@ class _NewSpacePageState extends State<NewSpacePage> {
                               bloc.add(SpaceNameChanged(value)),
                           decoration: InputDecoration(
                             hintText: 'e.g. Kitchen',
-                            border: OutlineInputBorder(
-                              borderRadius: kCornerBorderRadius,
-                            ),
                             errorText:
                                 state.spaceName.isNotEmpty &&
                                     !state.isSpaceNameValid
@@ -159,11 +155,6 @@ class _NewSpacePageState extends State<NewSpacePage> {
                     ),
                   OutlinedButton.icon(
                     onPressed: () => bloc.add(const StorageSpotAdded()),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: kCornerBorderRadius,
-                      ),
-                    ),
                     icon: const Icon(Icons.add),
                     label: const Text('Add Another Storage Spot'),
                   ),
@@ -174,12 +165,6 @@ class _NewSpacePageState extends State<NewSpacePage> {
                       onPressed: state.canSubmit
                           ? () => bloc.add(const CreateSpaceSubmitted())
                           : null,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: kCornerBorderRadius,
-                        ),
-                      ),
                       child: isSubmitting
                           ? const SizedBox(
                               height: 20,

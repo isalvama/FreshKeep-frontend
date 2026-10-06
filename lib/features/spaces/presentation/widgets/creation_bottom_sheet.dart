@@ -45,8 +45,6 @@ class _CreationBottomSheet extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).colorScheme.primary,
                   foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: kCornerBorderRadius),
                 ),
                 onPressed: () {
                   Navigator.of(context).pop();
@@ -63,8 +61,6 @@ class _CreationBottomSheet extends StatelessWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
                     foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: kCornerBorderRadius),
                   ),
                   onPressed: () {
                     context.read<ShoppingReceiptBloc>().add(

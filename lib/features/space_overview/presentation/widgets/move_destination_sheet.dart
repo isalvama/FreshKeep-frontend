@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/constants/ui_constants.dart';
+import '../../../../shared/widgets/storage_spot_type_icon.dart';
 import '../../../spaces/domain/entities/space.dart';
 import '../../../spaces/presentation/bloc/spaces_bloc.dart';
 import '../../../spaces/presentation/widgets/storage_spot_type_sheet.dart';
@@ -103,7 +104,11 @@ class _MoveDestinationSheetState extends State<_MoveDestinationSheet> {
           )
         else
           Flexible(
+            // Each level has its own key so its rows are built fresh rather
+            // than reused from the other level: a reused ListTile animates
+            // its title style, and the two levels' styles can't be blended.
             child: ListView(
+              key: const ValueKey('spaces'),
               shrinkWrap: true,
               children: [
                 for (final space in spaces)
@@ -119,6 +124,9 @@ class _MoveDestinationSheetState extends State<_MoveDestinationSheet> {
                           ? '${space.spaceName} (current)'
                           : space.spaceName,
                     ),
+                    titleTextStyle: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(fontSize: 18),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => setState(() => _openedSpace = space),
                   ),
@@ -140,18 +148,25 @@ class _MoveDestinationSheetState extends State<_MoveDestinationSheet> {
         ),
         Flexible(
           child: ListView(
+            key: ValueKey('spots-${space.id}'),
             shrinkWrap: true,
             children: [
               for (final spot in space.storageSpots)
                 if (spot.id == widget.currentStorageSpotId)
                   ListTile(
                     enabled: false,
+                    // A disabled ListTile greys its text but not images.
+                    leading: Opacity(
+                      opacity: 0.38,
+                      child: StorageSpotTypeIcon(type: spot.type),
+                    ),
                     title: Text(spot.name),
                     subtitle: Text(storageSpotTypeLabel(spot.type)),
                     trailing: const Text('Current'),
                   )
                 else
                   ListTile(
+                    leading: StorageSpotTypeIcon(type: spot.type),
                     title: Text(spot.name),
                     subtitle: Text(storageSpotTypeLabel(spot.type)),
                     onTap: () => Navigator.of(context).pop(
