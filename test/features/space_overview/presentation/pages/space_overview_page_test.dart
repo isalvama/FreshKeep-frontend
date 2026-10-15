@@ -911,6 +911,100 @@ void main() {
       );
     });
 
+    testWidgets('rows have no edit button outside selection mode', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      expect(find.byTooltip('Edit'), findsNothing);
+    });
+
+    testWidgets('with one product selected, the app bar shows Edit just '
+        'before Move, and it opens that product\'s editor', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      final actions = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(IconButton),
+      );
+      final tooltips = [
+        for (final button in tester.widgetList<IconButton>(actions))
+          button.tooltip,
+      ];
+      expect(tooltips, ['Cancel selection', 'Edit', 'Move', 'Delete selected']);
+
+      await tester.tap(find.byTooltip('Edit'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('edit_product_name')))
+            .controller!
+            .text,
+        'Milk',
+      );
+    });
+
+    testWidgets('Edit disappears with two products selected and comes back '
+        'with one', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 selected'), findsOneWidget);
+      expect(find.byTooltip('Edit'), findsNothing);
+
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Edit'), findsOneWidget);
+    });
+
+    testWidgets('saving from the app bar Edit ends selection mode', (
+      tester,
+    ) async {
+      final (bloc, _) = await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('edit_product_name')),
+        'Oat milk',
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(bloc.state.isSelecting, isFalse);
+      expect(find.text('1 selected'), findsNothing);
+      expect(find.text('Oat milk'), findsOneWidget);
+    });
+
+    testWidgets('closing the editor without saving keeps the selection', (
+      tester,
+    ) async {
+      final (bloc, _) = await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      expect(bloc.state.selectedProductIds, {'product-1'});
+      expect(find.text('1 selected'), findsOneWidget);
+    });
+
     testWidgets('saving returns to the overview with the row updated and '
         're-sorted, and shows "Product updated"', (tester) async {
       final (bloc, products) = await pumpLoaded(tester);
