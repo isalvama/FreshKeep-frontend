@@ -568,6 +568,21 @@ void main() {
       await bloc.close();
     });
 
+    test('ends selection mode, like a move or a deletion', () async {
+      final bloc = await loaded();
+      bloc.add(const ProductSelectionToggled('p1'));
+      await _settle();
+      expect(bloc.state.isSelecting, isTrue);
+
+      bloc.add(ProductUpdated(update('p1', DateTime(2026, 10, 1))));
+      await _settle();
+
+      expect(bloc.state.selectedProductIds, isEmpty);
+      expect(bloc.state.isSelecting, isFalse);
+
+      await bloc.close();
+    });
+
     test('an unknown id emits nothing', () async {
       final bloc = await loaded();
       final emitted = <SpaceOverviewState>[];

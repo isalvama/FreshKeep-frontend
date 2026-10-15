@@ -271,6 +271,14 @@ class _SpaceOverviewPageState extends State<SpaceOverviewPage> {
       ),
       title: Text('${state.selectedProductIds.length} selected'),
       actions: [
+        if (_singleSelectedProduct(state) case final product?)
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit',
+            onPressed: state.isBusy
+                ? null
+                : () => _openEditor(context, product),
+          ),
         if (state.moveStatus is ProductMoveInProgress)
           _actionSpinner
         else
@@ -290,17 +298,23 @@ class _SpaceOverviewPageState extends State<SpaceOverviewPage> {
     );
   }
 
+  /// The selected product when exactly one is selected, otherwise null.
+  PersistedProduct? _singleSelectedProduct(SpaceOverviewState state) {
+    final status = state.status;
+    if (state.selectedProductIds.length != 1 ||
+        status is! SpaceOverviewLoadSuccess) {
+      return null;
+    }
+    return status.overview.productResults
+        .where((p) => p.id == state.selectedProductIds.single)
+        .firstOrNull;
+  }
+
   /// Enabled only for exactly one selected product that has a storage spot:
   /// the endpoint moves one product and needs its current spot.
   Widget _buildMoveAction(BuildContext context, SpaceOverviewState state) {
     final status = state.status;
-    final selected =
-        state.selectedProductIds.length == 1 &&
-            status is SpaceOverviewLoadSuccess
-        ? status.overview.productResults
-              .where((p) => p.id == state.selectedProductIds.single)
-              .firstOrNull
-        : null;
+    final selected = _singleSelectedProduct(state);
     final hasNoSpot = selected != null && selected.storageSpotId == null;
     final canMove = selected != null && !hasNoSpot && !state.isBusy;
 

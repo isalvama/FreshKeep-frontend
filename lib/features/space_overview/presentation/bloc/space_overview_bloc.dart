@@ -194,6 +194,8 @@ class SpaceOverviewBloc extends Bloc<SpaceOverviewEvent, SpaceOverviewState> {
             productResults: _sortedByExpiration(merged),
           ),
         ),
+        // Like a move or a deletion, a saved edit ends selection mode.
+        selectedProductIds: const {},
       ),
     );
   }
