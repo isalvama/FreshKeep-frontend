@@ -19,40 +19,40 @@ Keep track of what food you have, where it's stored, and how long you can keep i
 
 - [🥬 Fresh Keep](#-fresh-keep)
   - [Table of contents](#table-of-contents)
-  - [What is Fresh Keep?](#what-is-fresh-keep)
-  - [Get Started!](#get-started)
+  - [🥦 What is Fresh Keep?](#-what-is-fresh-keep)
+  - [💸 Start cutting down on food waste!](#-start-cutting-down-on-food-waste)
     - [1. Create an account and log in](#1-create-an-account-and-log-in)
     - [2. Create your first space](#2-create-your-first-space)
     - [3. Add food from a shopping receipt](#3-add-food-from-a-shopping-receipt)
     - [4. Keep track of what's in a space](#4-keep-track-of-whats-in-a-space)
     - [5. Share a space with others](#5-share-a-space-with-others)
-  - [Features](#features)
+  - [✨ Features](#-features)
     - [Authentication](#authentication)
     - [Spaces \& storage spots](#spaces--storage-spots)
     - [Shopping receipt processing](#shopping-receipt-processing)
     - [Space overview \& product management](#space-overview--product-management)
-  - [Tech stack](#tech-stack)
-  - [Getting started](#getting-started)
+  - [🛠️ Tech stack](#️-tech-stack)
+  - [🚀 Getting started](#-getting-started)
     - [Prerequisites](#prerequisites)
     - [Install and run](#install-and-run)
     - [Supported platforms](#supported-platforms)
-  - [Configuration](#configuration)
+  - [⚙️ Configuration](#️-configuration)
     - [Backend URL](#backend-url)
     - [Invitation deep links](#invitation-deep-links)
     - [Permissions](#permissions)
-  - [Project structure](#project-structure)
-  - [Architecture](#architecture)
+  - [🌳 Project structure](#-project-structure)
+  - [📐 Architecture](#-architecture)
     - [Conventions](#conventions)
-  - [Navigation](#navigation)
-  - [Backend API](#backend-api)
-  - [Testing](#testing)
-  - [Development workflow](#development-workflow)
+  - [📍 Navigation](#-navigation)
+  - [⛓ Backend API](#-backend-api)
+  - [🧪 Testing](#-testing)
+  - [🚧 Development workflow](#-development-workflow)
     - [Specs](#specs)
     - [Branches \& pull requests](#branches--pull-requests)
 
 ---
 
-## What is Fresh Keep?
+## 🥦 What is Fresh Keep?
 
 Fresh Keep is an application that helps households keep track of the food they buy and when it expires.
 
@@ -60,7 +60,7 @@ Take a photo of a shopping receipt, let AI extract the products and estimate the
 
 This repository is the cross-platform **Flutter client**. It talks to a separate Spring Boot backend over a JWT-secured REST API.
 
-## Get Started!
+## 💸 Start cutting down on food waste!
 
 Here is what a typical session looks like, from creating an account to managing your groceries.
 
@@ -110,7 +110,7 @@ Tap a space on **Home** to open its overview. Products are sorted by expiration 
 
 Everyone in the space sees the same products, so the whole household stays up to date.
 
-## Features
+## ✨ Features
 
 ### Authentication
 - User registration and login against the backend's JWT auth endpoints.
@@ -139,7 +139,7 @@ Everyone in the space sees the same products, so the whole household stays up to
 
 ---
 
-## Tech stack
+## 🛠️ Tech stack
 
 | Concern | Library |
 |---|---|
@@ -158,7 +158,7 @@ Everyone in the space sees the same products, so the whole household stays up to
 
 ---
 
-## Getting started
+## 🚀 Getting started
 
 ### Prerequisites
 
@@ -184,7 +184,7 @@ Android, iOS, web, macOS, Linux and Windows. All platform folders were generated
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 ### Backend URL
 
@@ -232,7 +232,7 @@ xcrun simctl openurl booted "freshkeep://join?token=YOUR_TOKEN"
 
 ---
 
-## Project structure
+## 🌳 Project structure
 
 ```
 lib/
@@ -276,7 +276,7 @@ features/<feature>/
 
 ---
 
-## Architecture
+## 📐 Architecture
 
 The app follows **Clean Architecture** with strictly separated layers:
 
@@ -301,7 +301,7 @@ Widget ──event──▶ BLoC ──▶ UseCase ──▶ Repository (interfa
 
 ---
 
-## Navigation
+## 📍 Navigation
 
 Routing is handled by GoRouter (`lib/routes/app_router.dart`). It re-runs its redirects whenever `AuthBloc` emits a new state:
 
@@ -322,7 +322,7 @@ Routing is handled by GoRouter (`lib/routes/app_router.dart`). It re-runs its re
 
 ---
 
-## Backend API
+## ⛓ Backend API
 
 The backend is a separate Spring Boot service and is not part of this repository. Its contract is documented in [`api_contract.md`](api_contract.md): request and response shapes, RFC 7807 `ProblemDetail` errors and the stateless JWT security model.
 
@@ -338,7 +338,7 @@ Endpoints used by the client:
 
 ---
 
-## Testing
+## 🧪 Testing
 
 The `test/` folder mirrors `lib/` and holds repository, BLoC, widget, router and DI tests.
 
@@ -350,7 +350,7 @@ flutter test --coverage                       # write coverage to coverage/lcov.
 
 ---
 
-## Development workflow
+## 🚧 Development workflow
 
 ```bash
 flutter analyze    # static analysis (flutter_lints)
