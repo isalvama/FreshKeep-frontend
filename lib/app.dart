@@ -111,7 +111,11 @@ class _AppState extends State<App> {
       ],
       child: AuthSessionListener(
         pendingInvitations: getIt<PendingInvitationStore>(),
-        child: MaterialApp.router(routerConfig: _router, theme: AppTheme.light),
+        child: MaterialApp.router(
+          routerConfig: _router,
+          theme: AppTheme.light,
+          debugShowCheckedModeBanner: false,
+        ),
       ),
     );
   }
