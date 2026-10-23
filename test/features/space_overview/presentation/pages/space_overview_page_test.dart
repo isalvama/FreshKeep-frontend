@@ -1,0 +1,1819 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fpdart/fpdart.dart';
+import 'package:go_router/go_router.dart';
+import 'package:fresh_keep_frontend/core/di/service_locator.dart';
+import 'package:fresh_keep_frontend/core/errors/failures.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/moved_product.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/product_changes.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/update_product_usecase.dart';
+import 'package:fresh_keep_frontend/features/products/presentation/bloc/edit_product_bloc.dart';
+import 'package:fresh_keep_frontend/features/products/presentation/pages/edit_product_page.dart';
+import 'package:fresh_keep_frontend/features/products/domain/entities/updated_product.dart';
+import 'package:fresh_keep_frontend/features/products/domain/repositories/product_repository.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_product_usecase.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/delete_products_usecase.dart';
+import 'package:fresh_keep_frontend/features/products/domain/usecases/move_product_usecase.dart';
+import 'package:fresh_keep_frontend/features/shopping_receipt/domain/entities/persisted_product.dart';
+import 'package:fresh_keep_frontend/features/space_overview/domain/entities/space_overview.dart';
+import 'package:fresh_keep_frontend/features/space_overview/domain/repositories/space_overview_repository.dart';
+import 'package:fresh_keep_frontend/features/space_overview/domain/usecases/get_space_overview_usecase.dart';
+import 'package:fresh_keep_frontend/features/space_overview/presentation/bloc/space_overview_bloc.dart';
+import 'package:fresh_keep_frontend/features/space_overview/presentation/pages/space_overview_page.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/space_invitation.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_type.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot_input.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/repositories/space_repository.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/usecases/create_space_invitation_usecase.dart';
+import 'package:fresh_keep_frontend/features/spaces/domain/usecases/get_user_spaces_usecase.dart';
+import 'package:fresh_keep_frontend/features/spaces/presentation/bloc/space_invitation_bloc.dart';
+import 'package:fresh_keep_frontend/features/spaces/presentation/bloc/spaces_bloc.dart';
+
+class _StubSpaceOverviewRepository implements SpaceOverviewRepository {
+  _StubSpaceOverviewRepository(this.results);
+
+  final List<Either<SpaceOverviewFailure, SpaceOverview>> results;
+  int _callCount = 0;
+
+  @override
+  Future<Either<SpaceOverviewFailure, SpaceOverview>> getSpaceOverview({
+    required String spaceId,
+  }) async {
+    final result = results[_callCount];
+    if (_callCount < results.length - 1) _callCount++;
+    return result;
+  }
+}
+
+class _PendingSpaceOverviewRepository implements SpaceOverviewRepository {
+  final Completer<Either<SpaceOverviewFailure, SpaceOverview>> completer =
+      Completer();
+
+  @override
+  Future<Either<SpaceOverviewFailure, SpaceOverview>> getSpaceOverview({
+    required String spaceId,
+  }) => completer.future;
+}
+
+class _UnusedProductRepository implements ProductRepository {
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProduct({
+    required String productId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProducts({
+    required List<String> productIds,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) => throw UnimplementedError();
+}
+
+/// Records every delete call. Each call resolves with [result], or waits on
+/// [pending] when it is set.
+class _RecordingProductRepository implements ProductRepository {
+  _RecordingProductRepository({this.result = const Right(unit)});
+
+  Either<ProductFailure, Unit> result;
+  Completer<Either<ProductFailure, Unit>>? pending;
+  final List<String> singleCalls = [];
+  final List<List<String>> batchCalls = [];
+
+  Future<Either<ProductFailure, Unit>> _respond() async =>
+      pending != null ? pending!.future : result;
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProduct({
+    required String productId,
+  }) {
+    singleCalls.add(productId);
+    return _respond();
+  }
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProducts({
+    required List<String> productIds,
+  }) {
+    batchCalls.add(productIds);
+    return _respond();
+  }
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) => throw UnimplementedError();
+}
+
+/// Answers every update with [result] and records the calls.
+class _UpdatingProductRepository implements ProductRepository {
+  _UpdatingProductRepository(this.result);
+
+  final UpdatedProduct result;
+  final List<(String, ProductChanges)> updateCalls = [];
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) async {
+    updateCalls.add((productId, changes));
+    return Right(result);
+  }
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProduct({
+    required String productId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProducts({
+    required List<String> productIds,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) => throw UnimplementedError();
+}
+
+const _fridge = StorageSpot(
+  id: 'spot-1',
+  name: 'Fridge',
+  type: StorageSpotType.fridge,
+);
+
+final _overview = SpaceOverview(
+  id: 'space-1',
+  name: 'Kitchen',
+  emoji: '🏠',
+  storageSpots: const [_fridge],
+  productResults: [
+    PersistedProduct(
+      id: 'product-1',
+      productName: 'Milk',
+      expirationDate: DateTime(2026, 9, 15),
+      storageSpotId: 'spot-1',
+      productType: 'DAIRY',
+      priceAmount: 2.5,
+      currency: 'USD',
+    ),
+    PersistedProduct(
+      id: 'product-2',
+      productName: 'Bread',
+      expirationDate: DateTime(2026, 9, 20),
+      storageSpotId: null,
+      productType: 'BAKERY',
+      priceAmount: null,
+      currency: null,
+    ),
+  ],
+);
+
+/// The space as Home last saw it; its name differs from [_overview]'s, as if
+/// it had been renamed since Home loaded its list.
+const _homeSpace = Space(
+  id: 'space-1',
+  spaceName: 'Old kitchen',
+  emoji: '🍳',
+  storageSpots: [],
+  creatorId: 'user-1',
+  participantIds: ['user-1'],
+);
+
+const _emptyOverview = SpaceOverview(
+  id: 'space-1',
+  name: 'Garage',
+  emoji: '🚗',
+  storageSpots: [],
+  productResults: [],
+);
+
+SpaceOverviewBloc _buildBloc(
+  SpaceOverviewRepository repository, {
+  ProductRepository? productRepository,
+}) {
+  final products = productRepository ?? _UnusedProductRepository();
+  return SpaceOverviewBloc(
+    getSpaceOverviewUseCase: GetSpaceOverviewUseCase(repository),
+    deleteProductUseCase: DeleteProductUseCase(products),
+    deleteProductsUseCase: DeleteProductsUseCase(products),
+    moveProductUseCase: MoveProductUseCase(products),
+  );
+}
+
+Future<void> _pumpOverviewPage(
+  WidgetTester tester,
+  SpaceOverviewBloc bloc, {
+  Space? space,
+}) {
+  return tester.pumpWidget(
+    BlocProvider<SpaceOverviewBloc>.value(
+      value: bloc,
+      child: MaterialApp(
+        home: SpaceOverviewPage(spaceId: 'space-1', space: space),
+      ),
+    ),
+  );
+}
+
+/// Mirrors the app's `/home` and `/space-overview/:spaceId` routes, with
+/// the overview reading its `Space` from `extra`.
+GoRouter _buildRouter(SpaceOverviewBloc bloc, {required String initial}) {
+  return GoRouter(
+    initialLocation: initial,
+    routes: [
+      GoRoute(
+        path: '/home',
+        builder: (context, state) =>
+            const Scaffold(body: Center(child: Text('Home page'))),
+      ),
+      GoRoute(
+        path: '/space-overview/:spaceId',
+        builder: (context, state) => BlocProvider<SpaceOverviewBloc>.value(
+          value: bloc,
+          child: SpaceOverviewPage(
+            spaceId: state.pathParameters['spaceId']!,
+            space: state.extra as Space?,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+/// Answers each `createInvitation` call with the next entry of [results]; a
+/// `null` entry waits on [pending]. Unused by tests that never tap Invite.
+class _InvitationSpaceRepository implements SpaceRepository {
+  final List<Either<SpaceFailure, SpaceInvitation>?> results = [];
+  final List<String> calls = [];
+
+  /// Created on the call rather than in `setUp`, so it completes inside the
+  /// widget test's fake-async zone.
+  Completer<Either<SpaceFailure, SpaceInvitation>>? pending;
+
+  @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) async {
+    final result = results[calls.length];
+    calls.add(spaceId);
+    return result ?? (pending = Completer()).future;
+  }
+
+  @override
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces() =>
+      throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, Space>> createSpace({
+    required String spaceName,
+    required String emoji,
+    required List<StorageSpotInput> storageSpots,
+  }) => throw UnimplementedError();
+}
+
+late _InvitationSpaceRepository _invitations;
+
+void main() {
+  // The page takes its SpaceInvitationBloc from get_it.
+  setUp(() {
+    _invitations = _InvitationSpaceRepository();
+    getIt.registerFactory(
+      () => SpaceInvitationBloc(
+        createSpaceInvitationUseCase: CreateSpaceInvitationUseCase(
+          _invitations,
+        ),
+      ),
+    );
+  });
+  tearDown(() => getIt.reset());
+  testWidgets('shows a loading indicator while fetching', (tester) async {
+    final bloc = _buildBloc(_PendingSpaceOverviewRepository());
+
+    await _pumpOverviewPage(tester, bloc);
+    bloc.add(const SpaceOverviewRequested('space-1'));
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets(
+    'shows the space name/emoji and every product with its resolved storage spot',
+    (tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('🏠 Kitchen'), findsOneWidget);
+      expect(find.text('Milk'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Milk'),
+          matching: find.text('Fridge'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Bread'), findsOneWidget);
+      expect(find.textContaining('No suggested spot'), findsOneWidget);
+    },
+  );
+
+  testWidgets('an empty productResults list shows an empty state', (
+    tester,
+  ) async {
+    final bloc = _buildBloc(
+      _StubSpaceOverviewRepository([const Right(_emptyOverview)]),
+    );
+
+    await _pumpOverviewPage(tester, bloc);
+    bloc.add(const SpaceOverviewRequested('space-1'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('🚗 Garage'), findsOneWidget);
+    expect(find.text('No products yet.'), findsOneWidget);
+  });
+
+  testWidgets('shows the failure message and Retry re-fetches successfully', (
+    tester,
+  ) async {
+    const failure = SpaceOverviewConflictFailure(
+      'You are not a participant of this space.',
+    );
+    final bloc = _buildBloc(
+      _StubSpaceOverviewRepository([const Left(failure), Right(_overview)]),
+    );
+
+    await _pumpOverviewPage(tester, bloc);
+    bloc.add(const SpaceOverviewRequested('space-1'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('You are not a participant of this space.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('🏠 Kitchen'), findsOneWidget);
+  });
+
+  group('AppBar title', () {
+    testWidgets('while loading, uses the space passed from Home', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_PendingSpaceOverviewRepository());
+
+      await _pumpOverviewPage(tester, bloc, space: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pump();
+
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('🍳 Old kitchen'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('while loading without a space, falls back to "Space"', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_PendingSpaceOverviewRepository());
+
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pump();
+
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('Space')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('on load failure, uses the space passed from Home', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([
+          const Left(SpaceOverviewConflictFailure('Nope.')),
+        ]),
+      );
+
+      await _pumpOverviewPage(tester, bloc, space: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nope.'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('🍳 Old kitchen'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('on load failure without a space, falls back to "Space"', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([
+          const Left(SpaceOverviewConflictFailure('Nope.')),
+        ]),
+      );
+
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('Space')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'once loaded, uses the overview response even when the passed space '
+      'differs',
+      (tester) async {
+        final bloc = _buildBloc(
+          _StubSpaceOverviewRepository([Right(_overview)]),
+        );
+
+        await _pumpOverviewPage(tester, bloc, space: _homeSpace);
+        bloc.add(const SpaceOverviewRequested('space-1'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text('🏠 Kitchen'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('🍳 Old kitchen'), findsNothing);
+      },
+    );
+  });
+
+  group('leading button', () {
+    testWidgets(
+      'with nothing to pop (receipt flow), "Back to Home" goes to /home',
+      (tester) async {
+        final bloc = _buildBloc(
+          _StubSpaceOverviewRepository([Right(_overview)]),
+        );
+        final router = _buildRouter(bloc, initial: '/space-overview/space-1');
+        addTearDown(router.dispose);
+
+        await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+        bloc.add(const SpaceOverviewRequested('space-1'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(BackButton), findsNothing);
+        await tester.tap(find.byTooltip('Back to Home'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Home page'), findsOneWidget);
+        expect(
+          router.routerDelegate.currentConfiguration.uri.toString(),
+          '/home',
+        );
+      },
+    );
+
+    testWidgets(
+      'with nothing to pop, "Back to Home" is also shown while loading and '
+      'on load failure',
+      (tester) async {
+        final bloc = _buildBloc(
+          _StubSpaceOverviewRepository([
+            const Left(SpaceOverviewConflictFailure('Nope.')),
+          ]),
+        );
+        final router = _buildRouter(bloc, initial: '/space-overview/space-1');
+        addTearDown(router.dispose);
+
+        await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byTooltip('Back to Home'), findsOneWidget);
+
+        bloc.add(const SpaceOverviewRequested('space-1'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Nope.'), findsOneWidget);
+        expect(find.byTooltip('Back to Home'), findsOneWidget);
+      },
+    );
+
+    testWidgets('pushed from Home, the back arrow pops back to Home', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      final router = _buildRouter(bloc, initial: '/home');
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      router.push('/space-overview/space-1', extra: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Back to Home'), findsNothing);
+      expect(find.byType(BackButton), findsOneWidget);
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsOneWidget);
+    });
+  });
+
+  group('selection mode', () {
+    Finder appBarText(String text) =>
+        find.descendant(of: find.byType(AppBar), matching: find.text(text));
+
+    Future<SpaceOverviewBloc> pumpLoaded(WidgetTester tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+      return bloc;
+    }
+
+    // Tapping a row outside selection mode opens the editor: see "editing".
+    testWidgets('outside selection mode there are no checkboxes', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+      expect(find.byTooltip('Cancel selection'), findsNothing);
+    });
+
+    testWidgets('a long press enters selection mode with that row checked', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Checkbox), findsNWidgets(2));
+      final milkCheckbox = tester.widget<Checkbox>(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Milk'),
+          matching: find.byType(Checkbox),
+        ),
+      );
+      expect(milkCheckbox.value, isTrue);
+      final breadCheckbox = tester.widget<Checkbox>(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Bread'),
+          matching: find.byType(Checkbox),
+        ),
+      );
+      expect(breadCheckbox.value, isFalse);
+      expect(appBarText('1 selected'), findsOneWidget);
+      expect(appBarText('🏠 Kitchen'), findsNothing);
+      expect(find.byTooltip('Cancel selection'), findsOneWidget);
+    });
+
+    testWidgets('tapping rows toggles them, and deselecting the last one '
+        'leaves selection mode', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+      expect(appBarText('2 selected'), findsOneWidget);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+      expect(appBarText('1 selected'), findsOneWidget);
+
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+    });
+
+    testWidgets('the close button clears the selection', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Cancel selection'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+    });
+
+    testWidgets('system back while selecting clears the selection and stays; '
+        'back again returns to Home', (tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      final router = _buildRouter(bloc, initial: '/home');
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      router.push('/space-overview/space-1', extra: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      expect(appBarText('1 selected'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsNothing);
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsOneWidget);
+    });
+  });
+
+  group('deleting', () {
+    Finder appBarText(String text) =>
+        find.descendant(of: find.byType(AppBar), matching: find.text(text));
+
+    Future<SpaceOverviewBloc> pumpLoaded(
+      WidgetTester tester,
+      _RecordingProductRepository products,
+    ) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([Right(_overview)]),
+        productRepository: products,
+      );
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+      return bloc;
+    }
+
+    Future<void> select(WidgetTester tester, List<String> names) async {
+      await tester.longPress(find.text(names.first));
+      await tester.pumpAndSettle();
+      for (final name in names.skip(1)) {
+        await tester.tap(find.text(name));
+        await tester.pumpAndSettle();
+      }
+    }
+
+    Future<void> confirmDelete(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Delete selected'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    }
+
+    testWidgets('the delete icon only shows in selection mode', (tester) async {
+      await pumpLoaded(tester, _RecordingProductRepository());
+      expect(find.byTooltip('Delete selected'), findsNothing);
+
+      await select(tester, ['Milk']);
+
+      expect(find.byTooltip('Delete selected'), findsOneWidget);
+    });
+
+    testWidgets('the icon opens a dialog with the selected count, and Cancel '
+        'deletes nothing and keeps the selection', (tester) async {
+      final products = _RecordingProductRepository();
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk', 'Bread']);
+
+      await tester.tap(find.byTooltip('Delete selected'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete 2 products?'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(products.singleCalls, isEmpty);
+      expect(products.batchCalls, isEmpty);
+      expect(appBarText('2 selected'), findsOneWidget);
+    });
+
+    testWidgets('with 1 selected, the dialog says "1 product" and Delete uses '
+        'the single endpoint, removes the row and shows a SnackBar', (
+      tester,
+    ) async {
+      final products = _RecordingProductRepository();
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk']);
+
+      await tester.tap(find.byTooltip('Delete selected'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete 1 product?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(products.singleCalls, ['product-1']);
+      expect(products.batchCalls, isEmpty);
+      expect(find.text('Milk'), findsNothing);
+      expect(find.text('Bread'), findsOneWidget);
+      expect(find.byType(Checkbox), findsNothing);
+      expect(appBarText('🏠 Kitchen'), findsOneWidget);
+      expect(find.text('1 product deleted'), findsOneWidget);
+    });
+
+    testWidgets('with 2 selected, Delete uses the batch endpoint; deleting '
+        'every product shows the empty state', (tester) async {
+      final products = _RecordingProductRepository();
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk', 'Bread']);
+
+      await confirmDelete(tester);
+      await tester.pumpAndSettle();
+
+      expect(products.singleCalls, isEmpty);
+      expect(products.batchCalls, hasLength(1));
+      expect(
+        products.batchCalls.single,
+        unorderedEquals(['product-1', 'product-2']),
+      );
+      expect(find.text('No products yet.'), findsOneWidget);
+      expect(find.text('2 products deleted'), findsOneWidget);
+    });
+
+    testWidgets('while the request is in flight, a spinner replaces the '
+        'icon and the selection is locked', (tester) async {
+      final products = _RecordingProductRepository()
+        ..pending = Completer<Either<ProductFailure, Unit>>();
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk']);
+
+      await confirmDelete(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byTooltip('Delete selected'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('Cancel selection'));
+      await tester.tap(find.text('Bread'));
+      await tester.pump();
+      expect(appBarText('1 selected'), findsOneWidget);
+
+      products.pending!.complete(const Right(unit));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Milk'), findsNothing);
+      expect(find.text('1 product deleted'), findsOneWidget);
+    });
+
+    testWidgets('on failure, rows and selection stay, the SnackBar shows the '
+        'message, and Delete can be retried', (tester) async {
+      final products = _RecordingProductRepository(
+        result: const Left(ProductValidationFailure('Product not found')),
+      );
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk']);
+
+      await confirmDelete(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Product not found'), findsOneWidget);
+      expect(find.text('Milk'), findsOneWidget);
+      expect(find.text('Bread'), findsOneWidget);
+      expect(appBarText('1 selected'), findsOneWidget);
+
+      products.result = const Right(unit);
+      await confirmDelete(tester);
+      await tester.pumpAndSettle();
+
+      expect(products.singleCalls, ['product-1', 'product-1']);
+      expect(find.text('Milk'), findsNothing);
+      expect(find.text('1 product deleted'), findsOneWidget);
+    });
+  });
+
+  group('editing', () {
+    /// Milk, renamed and moved to after Bread's Sep 20.
+    final oatMilk = UpdatedProduct(
+      productId: 'product-1',
+      name: 'Oat milk',
+      expirationDate: DateTime(2026, 9, 25),
+      productType: 'DAIRY',
+      amount: 2.5,
+      currency: 'USD',
+    );
+
+    /// Mirrors the app's overview and edit routes.
+    Future<(SpaceOverviewBloc, _UpdatingProductRepository)> pumpLoaded(
+      WidgetTester tester,
+    ) async {
+      final products = _UpdatingProductRepository(oatMilk);
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      final router = GoRouter(
+        initialLocation: '/space-overview/space-1',
+        routes: [
+          GoRoute(
+            path: '/space-overview/:spaceId',
+            builder: (context, state) => BlocProvider<SpaceOverviewBloc>.value(
+              value: bloc,
+              child: SpaceOverviewPage(
+                spaceId: state.pathParameters['spaceId']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/space-overview/:spaceId/products/:productId/edit',
+            builder: (context, state) => BlocProvider(
+              create: (_) => EditProductBloc(
+                updateProductUseCase: UpdateProductUseCase(products),
+                product: state.extra as PersistedProduct,
+              ),
+              child: const EditProductPage(),
+            ),
+          ),
+        ],
+      );
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+      return (bloc, products);
+    }
+
+    List<String> rowTitles(WidgetTester tester) => [
+      for (final tile in tester.widgetList<ListTile>(find.byType(ListTile)))
+        ((tile.title as Text).data)!,
+    ];
+
+    testWidgets('tapping a row outside selection mode opens its editor', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('edit_product_name')))
+            .controller!
+            .text,
+        'Milk',
+      );
+    });
+
+    testWidgets('rows have no edit button outside selection mode', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      expect(find.byTooltip('Edit'), findsNothing);
+    });
+
+    testWidgets('with one product selected, the app bar shows Edit just '
+        'before Move, and it opens that product\'s editor', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      final actions = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(IconButton),
+      );
+      final tooltips = [
+        for (final button in tester.widgetList<IconButton>(actions))
+          button.tooltip,
+      ];
+      expect(tooltips, ['Cancel selection', 'Edit', 'Move', 'Delete selected']);
+
+      await tester.tap(find.byTooltip('Edit'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('edit_product_name')))
+            .controller!
+            .text,
+        'Milk',
+      );
+    });
+
+    testWidgets('Edit disappears with two products selected and comes back '
+        'with one', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 selected'), findsOneWidget);
+      expect(find.byTooltip('Edit'), findsNothing);
+
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Edit'), findsOneWidget);
+    });
+
+    testWidgets('saving from the app bar Edit ends selection mode', (
+      tester,
+    ) async {
+      final (bloc, _) = await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('edit_product_name')),
+        'Oat milk',
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(bloc.state.isSelecting, isFalse);
+      expect(find.text('1 selected'), findsNothing);
+      expect(find.text('Oat milk'), findsOneWidget);
+    });
+
+    testWidgets('closing the editor without saving keeps the selection', (
+      tester,
+    ) async {
+      final (bloc, _) = await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      expect(bloc.state.selectedProductIds, {'product-1'});
+      expect(find.text('1 selected'), findsOneWidget);
+    });
+
+    testWidgets('saving returns to the overview with the row updated and '
+        're-sorted, and shows "Product updated"', (tester) async {
+      final (bloc, products) = await pumpLoaded(tester);
+      expect(rowTitles(tester), ['Milk', 'Bread']);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('edit_product_name')),
+        'Oat milk',
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(products.updateCalls, [
+        ('product-1', const ProductChanges(name: 'Oat milk')),
+      ]);
+      expect(find.text('Edit product'), findsNothing);
+      expect(rowTitles(tester), ['Bread', 'Oat milk']);
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Oat milk'),
+          matching: find.text('Fridge'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('25 Sep 2026'), findsOneWidget);
+      expect(find.text('Product updated'), findsOneWidget);
+
+      final overview = (bloc.state.status as SpaceOverviewLoadSuccess).overview;
+      expect(overview.productResults.last.storageSpotId, 'spot-1');
+    });
+
+    testWidgets('closing without saving leaves the list unchanged and shows '
+        'no SnackBar', (tester) async {
+      final (_, products) = await pumpLoaded(tester);
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsNothing);
+      expect(rowTitles(tester), ['Milk', 'Bread']);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(products.updateCalls, isEmpty);
+    });
+
+    testWidgets('in selection mode, tapping a row toggles it and does not '
+        'open the editor', (tester) async {
+      final (bloc, _) = await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bread'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsNothing);
+      expect(bloc.state.selectedProductIds, {'product-1', 'product-2'});
+
+      await tester.tap(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit product'), findsNothing);
+      expect(bloc.state.selectedProductIds, {'product-2'});
+    });
+  });
+
+  group('moving', () {
+    const pantryShelf = StorageSpot(
+      id: 'spot-2',
+      name: 'Top shelf',
+      type: StorageSpotType.shelf,
+    );
+    final overview = SpaceOverview(
+      id: 'space-1',
+      name: 'Kitchen',
+      emoji: '🏠',
+      storageSpots: const [_fridge, pantryShelf],
+      productResults: [
+        PersistedProduct(
+          id: 'product-1',
+          productName: 'Milk',
+          expirationDate: DateTime(2026, 9, 15),
+          storageSpotId: 'spot-1',
+          productType: 'DAIRY',
+          priceAmount: null,
+          currency: null,
+        ),
+        PersistedProduct(
+          id: 'product-2',
+          productName: 'Bread',
+          expirationDate: DateTime(2026, 9, 20),
+          storageSpotId: null,
+          productType: 'BAKERY',
+          priceAmount: null,
+          currency: null,
+        ),
+        PersistedProduct(
+          id: 'product-3',
+          productName: 'Eggs',
+          expirationDate: DateTime(2026, 9, 25),
+          storageSpotId: 'spot-1',
+          productType: 'DAIRY',
+          priceAmount: null,
+          currency: null,
+        ),
+      ],
+    );
+    const spaces = [
+      Space(
+        id: 'space-1',
+        spaceName: 'Kitchen',
+        emoji: '🏠',
+        storageSpots: [_fridge, pantryShelf],
+        creatorId: 'user-1',
+        participantIds: ['user-1'],
+      ),
+      Space(
+        id: 'space-2',
+        spaceName: 'Garage',
+        emoji: '🚗',
+        storageSpots: [
+          StorageSpot(
+            id: 'spot-x',
+            name: 'Chest',
+            type: StorageSpotType.freezer,
+          ),
+        ],
+        creatorId: 'user-1',
+        participantIds: ['user-1'],
+      ),
+    ];
+
+    Finder appBarText(String text) =>
+        find.descendant(of: find.byType(AppBar), matching: find.text(text));
+
+    IconButton moveButton(WidgetTester tester) => tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.drive_file_move_outline),
+    );
+
+    Future<void> pumpLoaded(
+      WidgetTester tester,
+      _MovingProductRepository products,
+    ) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([Right(overview)]),
+        productRepository: products,
+      );
+      final spacesBloc = SpacesBloc(
+        getUserSpacesUseCase: GetUserSpacesUseCase(
+          _StubSpaceRepository(spaces),
+        ),
+      );
+      spacesBloc.add(const SpacesRequested());
+      await tester.pumpWidget(
+        MultiBlocProvider(
+          providers: [
+            BlocProvider<SpacesBloc>.value(value: spacesBloc),
+            BlocProvider<SpaceOverviewBloc>.value(value: bloc),
+          ],
+          child: const MaterialApp(home: SpaceOverviewPage(spaceId: 'space-1')),
+        ),
+      );
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> select(WidgetTester tester, List<String> names) async {
+      await tester.longPress(find.text(names.first));
+      await tester.pumpAndSettle();
+      for (final name in names.skip(1)) {
+        await tester.tap(find.text(name));
+        await tester.pumpAndSettle();
+      }
+    }
+
+    /// Opens the sheet and picks [spot] in [space].
+    Future<void> pickDestination(
+      WidgetTester tester,
+      String space,
+      String spot,
+    ) async {
+      await tester.tap(find.byTooltip('Move'));
+      await tester.pumpAndSettle();
+      // The filter chips behind the sheet show the same spot names.
+      Finder inSheet(String text) => find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text(text),
+      );
+      await tester.tap(inSheet(space));
+      await tester.pumpAndSettle();
+      await tester.tap(inSheet(spot));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> confirmMove(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(TextButton, 'Move'));
+    }
+
+    double rowTop(WidgetTester tester, String name) =>
+        tester.getTopLeft(find.text(name)).dy;
+
+    testWidgets('the Move action is only in selection mode and enabled for '
+        'exactly one product with a storage spot', (tester) async {
+      await pumpLoaded(tester, _MovingProductRepository());
+      expect(
+        find.widgetWithIcon(IconButton, Icons.drive_file_move_outline),
+        findsNothing,
+      );
+
+      await select(tester, ['Milk']);
+      expect(moveButton(tester).onPressed, isNotNull);
+      expect(find.byTooltip('Move'), findsOneWidget);
+
+      await tester.tap(find.text('Eggs'));
+      await tester.pumpAndSettle();
+      expect(appBarText('2 selected'), findsOneWidget);
+      expect(moveButton(tester).onPressed, isNull);
+
+      await tester.tap(find.text('Milk'));
+      await tester.tap(find.text('Eggs'));
+      await tester.pumpAndSettle();
+      await select(tester, ['Bread']);
+      expect(moveButton(tester).onPressed, isNull);
+      expect(
+        find.byTooltip('This product has no storage spot'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('within the same space: confirms, sends the move, updates and '
+        're-sorts the row, and shows the new date', (tester) async {
+      final products = _MovingProductRepository()
+        ..result = Right(
+          MovedProduct(
+            productId: 'product-1',
+            newStorageSpotId: 'spot-2',
+            newExpirationDate: DateTime(2026, 9, 30),
+          ),
+        );
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk']);
+
+      await pickDestination(tester, 'Kitchen (current)', 'Top shelf');
+
+      expect(
+        find.text(
+          'Move Milk to Kitchen · Top shelf? '
+          'Its expiration date will be recalculated.',
+          findRichText: true,
+        ),
+        findsOneWidget,
+      );
+      await confirmMove(tester);
+      await tester.pumpAndSettle();
+
+      expect(products.moveCalls, [('product-1', 'spot-1', 'spot-2')]);
+      final milkRow = find.widgetWithText(ListTile, 'Milk');
+      for (final text in ['Top shelf', '30 Sep 2026']) {
+        expect(
+          find.descendant(of: milkRow, matching: find.text(text)),
+          findsOneWidget,
+        );
+      }
+      expect(rowTop(tester, 'Bread'), lessThan(rowTop(tester, 'Eggs')));
+      expect(rowTop(tester, 'Eggs'), lessThan(rowTop(tester, 'Milk')));
+      expect(
+        find.text(
+          'Moved to Kitchen · Top shelf. New expiration date: 2026-09-30',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('selected'), findsNothing);
+    });
+
+    testWidgets('to another space: the row disappears', (tester) async {
+      final products = _MovingProductRepository()
+        ..result = Right(
+          MovedProduct(
+            productId: 'product-1',
+            newStorageSpotId: 'spot-x',
+            newExpirationDate: DateTime(2026, 9, 18),
+          ),
+        );
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk']);
+
+      await pickDestination(tester, 'Garage', 'Chest');
+      await confirmMove(tester);
+      await tester.pumpAndSettle();
+
+      expect(products.moveCalls, [('product-1', 'spot-1', 'spot-x')]);
+      expect(find.text('Milk'), findsNothing);
+      expect(find.text('Bread'), findsOneWidget);
+      expect(find.text('Eggs'), findsOneWidget);
+      expect(
+        find.text('Moved to Garage · Chest. New expiration date: 2026-09-18'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('selected'), findsNothing);
+    });
+
+    testWidgets('dismissing the sheet or cancelling the dialog sends nothing', (
+      tester,
+    ) async {
+      final products = _MovingProductRepository();
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk']);
+
+      await tester.tap(find.byTooltip('Move'));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(find.text('Move to'), findsNothing);
+
+      await pickDestination(tester, 'Garage', 'Chest');
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(products.moveCalls, isEmpty);
+      expect(appBarText('1 selected'), findsOneWidget);
+      expect(find.text('Milk'), findsOneWidget);
+    });
+
+    testWidgets('on failure, selection mode stays and the SnackBar shows the '
+        'message', (tester) async {
+      final products = _MovingProductRepository()
+        ..result = const Left(
+          ProductServerFailure(
+            'Something went wrong on the server. Try again later.',
+          ),
+        );
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk']);
+
+      await pickDestination(tester, 'Garage', 'Chest');
+      await confirmMove(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Something went wrong on the server. Try again later.'),
+        findsOneWidget,
+      );
+      expect(appBarText('1 selected'), findsOneWidget);
+      expect(find.text('Milk'), findsOneWidget);
+      expect(moveButton(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('while moving, a spinner replaces Move and taps, ✕, Delete '
+        'and back are locked', (tester) async {
+      final products = _MovingProductRepository()
+        ..pending = Completer<Either<ProductFailure, MovedProduct>>();
+      await pumpLoaded(tester, products);
+      await select(tester, ['Milk']);
+
+      await pickDestination(tester, 'Garage', 'Chest');
+      await confirmMove(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byTooltip('Move'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.delete_outline),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.close))
+            .onPressed,
+        isNull,
+      );
+
+      await tester.tap(find.text('Bread'));
+      await tester.longPress(find.text('Eggs'));
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(appBarText('1 selected'), findsOneWidget);
+      expect(find.text('Milk'), findsOneWidget);
+
+      products.pending!.complete(
+        Right(
+          MovedProduct(
+            productId: 'product-1',
+            newStorageSpotId: 'spot-x',
+            newExpirationDate: DateTime(2026, 9, 18),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(products.moveCalls, hasLength(1));
+      expect(find.text('Milk'), findsNothing);
+      expect(find.textContaining('selected'), findsNothing);
+    });
+  });
+
+  group('inviting', () {
+    final invitation = SpaceInvitation(
+      id: 'invitation-1',
+      token: 'token-1',
+      spaceId: 'space-1',
+      expiresAt: DateTime.utc(2026, 9, 29, 21),
+    );
+    final secondInvitation = SpaceInvitation(
+      id: 'invitation-2',
+      token: 'token-2',
+      spaceId: 'space-1',
+      expiresAt: DateTime.utc(2026, 9, 29, 22),
+    );
+    const conflict = Left<SpaceFailure, SpaceInvitation>(
+      SpaceConflictFailure("You're not a participant of this space."),
+    );
+
+    final inviteAction = find.byTooltip('Invite');
+
+    Future<void> pumpLoaded(WidgetTester tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(_overview)]));
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('with the overview loaded, the AppBar shows Invite', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: inviteAction),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.person_add_alt_1), findsOneWidget);
+    });
+
+    testWidgets('Invite is not shown while the overview is loading', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_PendingSpaceOverviewRepository());
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pump();
+
+      expect(inviteAction, findsNothing);
+    });
+
+    testWidgets('Invite is not shown when the overview failed to load', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([
+          const Left(SpaceOverviewNetworkFailure('No connection.')),
+        ]),
+      );
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No connection.'), findsOneWidget);
+      expect(inviteAction, findsNothing);
+    });
+
+    testWidgets('Invite is not shown in selection mode', (tester) async {
+      await pumpLoaded(tester);
+
+      await tester.longPress(find.text('Milk'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 selected'), findsOneWidget);
+      expect(inviteAction, findsNothing);
+    });
+
+    testWidgets('tapping Invite shows a spinner until the invitation is '
+        'created, then the dialog with the link', (tester) async {
+      _invitations.results.add(null);
+      await pumpLoaded(tester);
+
+      await tester.tap(inviteAction);
+      await tester.pump();
+
+      expect(_invitations.calls, ['space-1']);
+      expect(inviteAction, findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+
+      _invitations.pending!.complete(Right(invitation));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invite to Kitchen'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is SelectableText && w.data == 'freshkeep://join?token=token-1',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('Close leaves the overview unchanged, and Invite again creates '
+        'a new invitation', (tester) async {
+      _invitations.results.addAll([Right(invitation), Right(secondInvitation)]);
+      await pumpLoaded(tester);
+
+      await tester.tap(inviteAction);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Invite to Kitchen'), findsNothing);
+      expect(find.text('🏠 Kitchen'), findsOneWidget);
+      expect(find.text('Milk'), findsOneWidget);
+      expect(find.text('Bread'), findsOneWidget);
+
+      await tester.tap(inviteAction);
+      await tester.pumpAndSettle();
+
+      expect(_invitations.calls, ['space-1', 'space-1']);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is SelectableText && w.data == 'freshkeep://join?token=token-2',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('on failure, a SnackBar shows the message, no dialog opens '
+        'and Invite can be tapped again', (tester) async {
+      _invitations.results.addAll([conflict, conflict]);
+      await pumpLoaded(tester);
+
+      await tester.tap(inviteAction);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text("You're not a participant of this space."),
+        findsOneWidget,
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.person_add_alt_1),
+            )
+            .onPressed,
+        isNotNull,
+      );
+
+      await tester.tap(inviteAction);
+      await tester.pumpAndSettle();
+
+      expect(_invitations.calls, hasLength(2));
+      expect(
+        find.text("You're not a participant of this space."),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('searching and filtering', () {
+    PersistedProduct product(String id, String name, String? spotId) =>
+        PersistedProduct(
+          id: id,
+          productName: name,
+          expirationDate: DateTime(2026, 10, 1),
+          storageSpotId: spotId,
+          productType: 'OTHER',
+          priceAmount: null,
+          currency: null,
+        );
+
+    const pantry = StorageSpot(
+      id: 'spot-2',
+      name: 'Pantry',
+      type: StorageSpotType.pantry,
+    );
+
+    final overview = SpaceOverview(
+      id: 'space-1',
+      name: 'Kitchen',
+      emoji: '🏠',
+      storageSpots: const [_fridge, pantry],
+      productResults: [
+        product('product-1', 'Whole milk', 'spot-1'),
+        product('product-2', 'Yogurt', 'spot-1'),
+        product('product-3', 'Oat milk', 'spot-2'),
+        product('product-4', 'Rice', null),
+      ],
+    );
+
+    List<String> rowTitles(WidgetTester tester) => [
+      for (final tile in tester.widgetList<ListTile>(find.byType(ListTile)))
+        ((tile.title as Text).data)!,
+    ];
+
+    Finder chip(String label) => find.widgetWithText(ChoiceChip, label);
+
+    Future<SpaceOverviewBloc> pumpLoaded(WidgetTester tester) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(overview)]));
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+      return bloc;
+    }
+
+    testWidgets('the search icon opens a field that filters by name; closing '
+        'it shows every product again', (tester) async {
+      final bloc = await pumpLoaded(tester);
+      expect(find.byType(TextField), findsNothing);
+
+      await tester.tap(find.byTooltip('Search'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('🏠 Kitchen'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), 'MILK');
+      await tester.pumpAndSettle();
+      expect(rowTitles(tester), ['Whole milk', 'Oat milk']);
+
+      await tester.tap(find.byTooltip('Close search'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('🏠 Kitchen'), findsOneWidget);
+      expect(bloc.state.searchQuery, '');
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt', 'Oat milk', 'Rice']);
+    });
+
+    testWidgets('back closes the search instead of leaving the page', (
+      tester,
+    ) async {
+      final bloc = _buildBloc(_StubSpaceOverviewRepository([Right(overview)]));
+      final router = _buildRouter(bloc, initial: '/home');
+      addTearDown(router.dispose);
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      router.push('/space-overview/space-1', extra: _homeSpace);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Search'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'rice');
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      expect(bloc.state.searchQuery, '');
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt', 'Oat milk', 'Rice']);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Home page'), findsOneWidget);
+    });
+
+    testWidgets('a chip per storage spot, plus All, filters the list', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+      expect(tester.widget<ChoiceChip>(chip('All')).selected, isTrue);
+
+      await tester.tap(chip('Fridge'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ChoiceChip>(chip('Fridge')).selected, isTrue);
+      expect(tester.widget<ChoiceChip>(chip('All')).selected, isFalse);
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt']);
+
+      await tester.tap(chip('Pantry'));
+      await tester.pumpAndSettle();
+      expect(rowTitles(tester), ['Oat milk']);
+
+      await tester.tap(chip('All'));
+      await tester.pumpAndSettle();
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt', 'Oat milk', 'Rice']);
+    });
+
+    testWidgets('tapping the selected spot again shows all products', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      await tester.tap(chip('Fridge'));
+      await tester.pumpAndSettle();
+      await tester.tap(chip('Fridge'));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<ChoiceChip>(chip('All')).selected, isTrue);
+      expect(rowTitles(tester), ['Whole milk', 'Yogurt', 'Oat milk', 'Rice']);
+    });
+
+    testWidgets('search and spot combine; no match shows a message', (
+      tester,
+    ) async {
+      await pumpLoaded(tester);
+
+      await tester.tap(chip('Pantry'));
+      await tester.tap(find.byTooltip('Search'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'yogurt');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListTile), findsNothing);
+      expect(find.text('No products match.'), findsOneWidget);
+      // The chips stay, so the filter can be changed.
+      expect(chip('All'), findsOneWidget);
+    });
+
+    testWidgets('a space without storage spots shows no chips', (tester) async {
+      final bloc = _buildBloc(
+        _StubSpaceOverviewRepository([
+          Right(
+            SpaceOverview(
+              id: 'space-1',
+              name: 'Kitchen',
+              emoji: '🏠',
+              storageSpots: const [],
+              productResults: [product('product-4', 'Rice', null)],
+            ),
+          ),
+        ]),
+      );
+      await _pumpOverviewPage(tester, bloc);
+      bloc.add(const SpaceOverviewRequested('space-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChoiceChip), findsNothing);
+      expect(find.text('Rice'), findsOneWidget);
+    });
+  });
+}
+
+/// Records every move call. Each call resolves with [result], or waits on
+/// [pending] when it is set.
+class _MovingProductRepository implements ProductRepository {
+  Either<ProductFailure, MovedProduct>? result;
+  Completer<Either<ProductFailure, MovedProduct>>? pending;
+  final List<(String, String, String)> moveCalls = [];
+
+  @override
+  Future<Either<ProductFailure, MovedProduct>> moveProduct({
+    required String productId,
+    required String oldStorageSpotId,
+    required String newStorageSpotId,
+  }) async {
+    moveCalls.add((productId, oldStorageSpotId, newStorageSpotId));
+    return pending != null ? pending!.future : result!;
+  }
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProduct({
+    required String productId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, Unit>> deleteProducts({
+    required List<String> productIds,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<ProductFailure, UpdatedProduct>> updateProduct({
+    required String productId,
+    required ProductChanges changes,
+  }) => throw UnimplementedError();
+}
+
+class _StubSpaceRepository implements SpaceRepository {
+  _StubSpaceRepository(this.spaces);
+
+  final List<Space> spaces;
+
+  @override
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces() async =>
+      Right(spaces);
+
+  @override
+  Future<Either<SpaceFailure, Space>> createSpace({
+    required String spaceName,
+    required String emoji,
+    required List<StorageSpotInput> storageSpots,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, String>> joinInvitation({
+    required String token,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  }) => throw UnimplementedError();
+}

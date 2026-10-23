@@ -1,0 +1,23 @@
+import 'package:fpdart/fpdart.dart';
+
+import '../../../../core/errors/failures.dart';
+import '../entities/space.dart';
+import '../entities/space_invitation.dart';
+import '../entities/storage_spot_input.dart';
+
+abstract class SpaceRepository {
+  Future<Either<SpaceFailure, Space>> createSpace({
+    required String spaceName,
+    required String emoji,
+    required List<StorageSpotInput> storageSpots,
+  });
+
+  Future<Either<SpaceFailure, List<Space>>> getUserSpaces();
+
+  Future<Either<SpaceFailure, SpaceInvitation>> createInvitation({
+    required String spaceId,
+  });
+
+  /// Joins the space behind [token]; returns the joined space's id.
+  Future<Either<SpaceFailure, String>> joinInvitation({required String token});
+}

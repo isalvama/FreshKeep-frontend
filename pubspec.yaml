@@ -9,11 +9,44 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  dio: ^5.7.0
+  flutter_bloc: ^8.1.6
+  go_router: ^14.6.2
+  flutter_secure_storage: ^9.2.2
+  jwt_decoder: ^2.0.1
+  fpdart: ^1.1.0
+  equatable: ^2.0.7
+  get_it: ^8.0.3
+  emoji_picker_flutter: ^4.3.0
+  image_picker: ^1.1.2
+  share_plus: ^12.0.2
+  app_links: ^7.2.1
+  lottie: ^3.6.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  image_picker_platform_interface: ^2.10.0
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/animations/
+
+  fonts:
+    - family: WorkSans
+      fonts:
+        - asset: assets/fonts/work_sans/WorkSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/work_sans/WorkSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/work_sans/WorkSans-SemiBold.ttf
+          weight: 600
+    - family: NunitoSans
+      fonts:
+        - asset: "assets/fonts/nunito_sans/NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"
+        - asset: "assets/fonts/nunito_sans/NunitoSans-Italic-VariableFont_YTLC,opsz,wdth,wght.ttf"
+          style: italic
