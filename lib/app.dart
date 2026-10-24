@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:fresh_keep_frontend/shared/presentation/theme/theme_factory.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/config/env.dart';
@@ -10,7 +11,6 @@ import 'core/deep_links/invitation_link_listener.dart';
 import 'core/deep_links/pending_invitation_store.dart';
 import 'core/di/service_locator.dart';
 import 'core/network/dio_client.dart';
-import 'core/theme/app_theme.dart';
 import 'features/auth/data/datasources/auth_local_datasource.dart';
 import 'features/auth/data/datasources/auth_remote_datasource.dart';
 import 'features/auth/data/repositories/auth_repository_impl.dart';
@@ -113,7 +113,8 @@ class _AppState extends State<App> {
         pendingInvitations: getIt<PendingInvitationStore>(),
         child: MaterialApp.router(
           routerConfig: _router,
-          theme: AppTheme.light,
+          theme: ThemeFactory.lightTheme(),
+          darkTheme: ThemeFactory.darkTheme(),
           debugShowCheckedModeBanner: false,
         ),
       ),

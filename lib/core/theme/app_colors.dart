@@ -28,4 +28,8 @@ abstract class AppColors {
   static const expiredLight = Color(0xFFF6DEDA);
   static const expiringSoon = Color(0xFF7A5C00);
   static const expiringSoonLight = Color(0xFFFCEFC2);
+
+  // Shared
+  static const black = Color(0xFF000000);
+  static const disabled = Color(0xFFB5B5B5);
 }
