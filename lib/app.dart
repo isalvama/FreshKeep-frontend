@@ -1,8 +1,11 @@
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/adaptive_theme/adaptive_theme_cubit.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/adaptive_theme/adaptive_theme_state.dart';
 import 'package:fresh_keep_frontend/shared/presentation/theme/theme_factory.dart';
 import 'package:go_router/go_router.dart';
 
@@ -38,6 +41,12 @@ class App extends StatefulWidget {
 class _AppState extends State<App> {
   late final AuthRepository _authRepository;
   late final AuthBloc _authBloc;
+  late final AdaptiveThemeCubit themeCubit =
+      SchedulerBinding.instance.platformDispatcher.platformBrightness ==
+          Brightness.light
+      ? (AdaptiveThemeCubit()..setLightTheme())
+      : (AdaptiveThemeCubit()..setDarkTheme());
+
   // Built once, so the invitation link listener keeps a stable router.
   late final GoRouter _router;
   InvitationLinkListener? _invitationLinks;
@@ -111,13 +120,51 @@ class _AppState extends State<App> {
       ],
       child: AuthSessionListener(
         pendingInvitations: getIt<PendingInvitationStore>(),
-        child: MaterialApp.router(
-          routerConfig: _router,
-          theme: ThemeFactory.lightTheme(),
-          darkTheme: ThemeFactory.darkTheme(),
-          debugShowCheckedModeBanner: false,
+        child: BlocBuilder<AdaptiveThemeCubit, AdaptiveThemeState>(
+          bloc: themeCubit,
+          buildWhen: ((previous, current) => previous.name != current.name),
+          builder: (context, adaptiveThemeState) {
+            return AppView(
+              debugShowMaterialGrid:
+                  false, // context.watch<QaConfig>().debugShowMaterialGrid,
+              showSemanticsDebugger:
+                  false, // context.watch<QaConfig>().showSemanticsDebugger,
+              themeMode: adaptiveThemeState == AdaptiveThemeState.light
+                  ? ThemeMode.light
+                  : ThemeMode.dark,
+              routerConfig: _router,
+            );
+          },
         ),
       ),
+    );
+  }
+}
+
+class AppView extends StatelessWidget {
+  final RouterConfig<Object>? routerConfig;
+  final ThemeMode themeMode;
+  final bool debugShowMaterialGrid;
+  final bool showSemanticsDebugger;
+
+  const AppView({
+    super.key,
+    this.routerConfig,
+    this.themeMode = ThemeMode.system,
+    this.debugShowMaterialGrid = false,
+    this.showSemanticsDebugger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      debugShowMaterialGrid: debugShowMaterialGrid,
+      showSemanticsDebugger: showSemanticsDebugger,
+      debugShowCheckedModeBanner: false,
+      theme: ThemeFactory.lightTheme(),
+      darkTheme: ThemeFactory.darkTheme(),
+      themeMode: themeMode,
+      routerConfig: routerConfig,
     );
   }
 }
