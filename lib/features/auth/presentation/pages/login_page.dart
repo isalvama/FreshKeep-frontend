@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_app_bar.dart';
 import 'package:go_router/go_router.dart';
 
 import '../bloc/form_status.dart';
@@ -44,18 +45,18 @@ class _LoginPageState extends State<LoginPage> {
   void _submit(BuildContext context) {
     if (_formKey.currentState!.validate()) {
       context.read<LoginBloc>().add(
-            LoginSubmitted(
-              email: _emailController.text.trim(),
-              password: _passwordController.text,
-            ),
-          );
+        LoginSubmitted(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Log in')),
+      appBar: DSAppBar(title: "Log In", backEnabled: true),
       body: BlocListener<LoginBloc, FormStatus>(
         listener: (context, state) {
           // The app-wide messenger keeps the SnackBar on screen while the
@@ -65,9 +66,9 @@ class _LoginPageState extends State<LoginPage> {
               SnackBar(content: Text('Logged in as ${state.user.email}')),
             );
           } else if (state is FormFailure) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.message)));
           }
         },
         child: Padding(
