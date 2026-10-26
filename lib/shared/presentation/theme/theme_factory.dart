@@ -27,19 +27,19 @@ abstract class ThemeFactory {
       );
 
   static ThemeData lightTheme() {
-    const defaultTextColor = AppColors.black;
+    const defaultTextColor = AppColors.brownEarth;
 
     final base = ThemeData.light().copyWith(
       disabledColor: AppColors.disabled,
       colorScheme: const ColorScheme(
-        primary: AppColors.cream,
-        secondary: AppColors.brownLight,
-        tertiary: AppColors.expiredLight,
-        surface: AppColors.white,
+        primary: AppColors.brown,
+        secondary: AppColors.sage,
+        tertiary: AppColors.brownMuted,
+        surface: AppColors.cream,
         error: AppColors.error,
-        onPrimary: AppColors.black,
+        onPrimary: AppColors.white,
         onSecondary: AppColors.white,
-        onSurface: AppColors.black,
+        onSurface: AppColors.brownDark,
         onError: AppColors.white,
         brightness: Brightness.light,
       ),
@@ -47,6 +47,9 @@ abstract class ThemeFactory {
         displayLarge: AppTextStyles.displayLarge(textColor: defaultTextColor),
         displayMedium: AppTextStyles.displayMedium(textColor: defaultTextColor),
         displaySmall: AppTextStyles.displaySmall(textColor: defaultTextColor),
+        headlineMedium: AppTextStyles.headlineMedium(
+          textColor: defaultTextColor,
+        ),
         bodyLarge: AppTextStyles.bodyLarge(textColor: defaultTextColor),
         bodyMedium: AppTextStyles.bodyMedium(textColor: defaultTextColor),
         labelSmall: AppTextStyles.labelSmall(textColor: defaultTextColor),

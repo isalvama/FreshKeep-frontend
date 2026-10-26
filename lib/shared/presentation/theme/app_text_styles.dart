@@ -86,11 +86,23 @@ abstract class AppTextStyles {
 
   static TextStyle titleMedium({required Color textColor}) {
     return TextStyle(
-      fontWeight: FontWeight.normal,
       fontSize: 16,
       height: 1,
       color: textColor,
       letterSpacing: -0.06,
+      fontStyle: FontStyle.normal,
+      fontFamily: primaryFontFamily,
+      fontFamilyFallback: const [primaryFontFamily, ...fontFamilyFallback],
+    );
+  }
+
+  static TextStyle headlineMedium({required Color textColor}) {
+    return TextStyle(
+      fontWeight: FontWeight.w700,
+      fontSize: 16,
+      height: 1,
+      color: textColor,
+      letterSpacing: -1,
       fontStyle: FontStyle.normal,
       fontFamily: primaryFontFamily,
       fontFamilyFallback: const [primaryFontFamily, ...fontFamilyFallback],
