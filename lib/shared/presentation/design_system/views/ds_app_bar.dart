@@ -12,7 +12,7 @@ class DSAppBar extends StatelessWidget implements PreferredSizeWidget {
   const DSAppBar({
     super.key,
     required this.title,
-    required this.backEnabled,
+    this.backEnabled = false,
     this.backgroundColor,
     this.onBack,
   });
@@ -32,7 +32,7 @@ class DSAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               icon: Icon(
                 CupertinoIcons.back,
-                color: context.colorScheme.onPrimary,
+                color: context.colorScheme.onSurface,
               ),
               tooltip: 'Close search',
               onPressed: onBack ?? () => Navigator.of(context).pop(),

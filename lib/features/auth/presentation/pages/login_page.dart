@@ -56,7 +56,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: DSAppBar(title: "Log In", backEnabled: true),
+      appBar: DSAppBar(title: "Log In"),
       body: BlocListener<LoginBloc, FormStatus>(
         listener: (context, state) {
           // The app-wide messenger keeps the SnackBar on screen while the
