@@ -56,9 +56,19 @@ class _DSTextFormFieldState extends State<DSTextFormField> {
             color: context.colorScheme.primary.withAlpha(unfocusedAlphaChannel),
           ),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(borderRadius)),
+          borderSide: BorderSide(
+            color: context.colorScheme.error.withAlpha(unfocusedAlphaChannel),
+          ),
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(borderRadius)),
           borderSide: BorderSide(color: context.colorScheme.primary),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(borderRadius)),
+          borderSide: BorderSide(color: context.colorScheme.error),
         ),
       ),
       validator: widget.validator,

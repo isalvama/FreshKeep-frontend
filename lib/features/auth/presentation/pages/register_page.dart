@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_app_bar.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_elevated_button.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_form_field.dart';
 import 'package:go_router/go_router.dart';
 
 import '../bloc/form_status.dart';
@@ -52,24 +55,24 @@ class _RegisterPageState extends State<RegisterPage> {
   void _submit(BuildContext context) {
     if (_formKey.currentState!.validate()) {
       context.read<RegisterBloc>().add(
-            RegisterSubmitted(
-              email: _emailController.text.trim(),
-              password: _passwordController.text,
-            ),
-          );
+        RegisterSubmitted(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
+      appBar: DSAppBar(title: 'Create account'),
       body: BlocListener<RegisterBloc, FormStatus>(
         listener: (context, state) {
           if (state is FormFailure) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.message)));
           } else if (state is FormSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -91,39 +94,34 @@ class _RegisterPageState extends State<RegisterPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextFormField(
+                DSTextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email'),
+                  labelText: 'Email',
                   validator: _validateEmail,
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
+                DSTextFormField(
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Password'),
+                  labelText: 'Password',
                   validator: _validatePassword,
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
+                DSTextFormField(
                   controller: _confirmPasswordController,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Confirm password'),
+                  labelText: 'Confirm password',
                   validator: _validateConfirmPassword,
                 ),
                 const SizedBox(height: 24),
                 BlocBuilder<RegisterBloc, FormStatus>(
                   builder: (context, state) {
                     final isSubmitting = state is FormSubmitting;
-                    return ElevatedButton(
-                      onPressed: isSubmitting ? null : () => _submit(context),
-                      child: isSubmitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Register'),
+                    return DSElevatedButton(
+                      text: "Register",
+                      isSubmitting: isSubmitting,
+                      submit: _submit,
                     );
                   },
                 ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_app_bar.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_elevated_button.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_form_field.dart';
 import 'package:go_router/go_router.dart';
 
@@ -97,15 +98,10 @@ class _LoginPageState extends State<LoginPage> {
                 BlocBuilder<LoginBloc, FormStatus>(
                   builder: (context, state) {
                     final isSubmitting = state is FormSubmitting;
-                    return ElevatedButton(
-                      onPressed: isSubmitting ? null : () => _submit(context),
-                      child: isSubmitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Log in'),
+                    return DSElevatedButton(
+                      text: "Log in",
+                      isSubmitting: isSubmitting,
+                      submit: _submit,
                     );
                   },
                 ),
