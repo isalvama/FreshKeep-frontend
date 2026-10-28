@@ -102,7 +102,7 @@ abstract class AppTextStyles {
       fontSize: 16,
       height: 1,
       color: textColor,
-      letterSpacing: -1,
+      letterSpacing: -0.06,
       fontStyle: FontStyle.normal,
       fontFamily: primaryFontFamily,
       fontFamilyFallback: const [primaryFontFamily, ...fontFamilyFallback],

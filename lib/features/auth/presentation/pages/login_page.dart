@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_app_bar.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_form_field.dart';
 import 'package:go_router/go_router.dart';
 
 import '../bloc/form_status.dart';
@@ -79,17 +80,17 @@ class _LoginPageState extends State<LoginPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextFormField(
+                DSTextFormField(
+                  labelText: 'Email',
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email'),
                   validator: _validateEmail,
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
+                DSTextFormField(
+                  labelText: 'Password',
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Password'),
                   validator: _validatePassword,
                 ),
                 const SizedBox(height: 24),
