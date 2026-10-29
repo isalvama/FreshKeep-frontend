@@ -16,27 +16,30 @@ class DSElevatedButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      style: ButtonStyle(
-        backgroundColor: WidgetStatePropertyAll<Color>(
-          context.colorScheme.primary,
+    return SizedBox(
+      height: Dimens.buttonHeightMedium,
+      child: ElevatedButton(
+        style: ButtonStyle(
+          backgroundColor: WidgetStatePropertyAll<Color>(
+            context.colorScheme.primary,
+          ),
         ),
+        onPressed: isSubmitting ? null : () => submit(context),
+        child: isSubmitting
+            ? const SizedBox(
+                height: Dimens.iconSizeSmall,
+                width: Dimens.iconSizeSmall,
+                child: CircularProgressIndicator(
+                  strokeWidth: Dimens.borderMedium,
+                ),
+              )
+            : Text(
+                text,
+                style: Theme.of(context).textTheme.headlineMedium!.copyWith(
+                  color: context.colorScheme.onPrimary,
+                ),
+              ),
       ),
-      onPressed: isSubmitting ? null : () => submit(context),
-      child: isSubmitting
-          ? const SizedBox(
-              height: Dimens.iconSizeSmall,
-              width: Dimens.iconSizeSmall,
-              child: CircularProgressIndicator(
-                strokeWidth: Dimens.borderMedium,
-              ),
-            )
-          : Text(
-              text,
-              style: Theme.of(context).textTheme.headlineMedium!.copyWith(
-                color: context.colorScheme.onPrimary,
-              ),
-            ),
     );
   }
 }

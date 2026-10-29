@@ -14,7 +14,7 @@ class DSTextFormField extends StatefulWidget {
     required this.controller,
     required this.validator,
     this.obscureText = false,
-    this.keyboardType,
+    this.keyboardType = TextInputType.text,
     required this.labelText,
   });
 
@@ -23,27 +23,53 @@ class DSTextFormField extends StatefulWidget {
 }
 
 class _DSTextFormFieldState extends State<DSTextFormField> {
-  final double borderRadius = Dimens.buttonHeightLarge;
+  final double borderRadius = Dimens.buttonRadiusXxLarge;
   final int unfocusedAlphaChannel = 150;
   final int disabledAlphaChannel = 100;
+  final String emptyString = " ";
+
   FocusNode focusNode = FocusNode();
 
   @override
   Widget build(BuildContext context) {
+    final double fontSize = context.textTheme.bodyLarge?.fontSize ?? 16;
+    final double vericalContentPadding =
+        (Dimens.buttonHeightMedium - fontSize) / 2;
+
     return TextFormField(
       controller: widget.controller,
       obscureText: widget.obscureText,
       focusNode: focusNode,
+      keyboardType: widget.keyboardType,
+      style: context.textTheme.bodyLarge,
       decoration: InputDecoration(
+        helperText: emptyString,
+        helperStyle: Theme.of(context).textTheme.labelSmall,
+        errorStyle: Theme.of(
+          context,
+        ).textTheme.labelSmall!.copyWith(color: context.colorScheme.error),
+        errorMaxLines: 1,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: Dimens.marginSmall,
+          vertical: vericalContentPadding,
+        ),
         filled: true,
         fillColor: Theme.of(context).colorScheme.onPrimary,
         labelText: widget.labelText,
-        labelStyle: Theme.of(context).textTheme.bodyLarge!.copyWith(
-          color: context.colorScheme.primary.withAlpha(unfocusedAlphaChannel),
-        ),
-        floatingLabelStyle: TextStyle(
-          color: context.colorScheme.primary.withAlpha(unfocusedAlphaChannel),
-        ),
+        labelStyle: WidgetStateTextStyle.resolveWith((Set<WidgetState> states) {
+          final Color color = states.contains(WidgetState.error)
+              ? context.colorScheme.error.withAlpha(unfocusedAlphaChannel)
+              : context.colorScheme.primary.withAlpha(unfocusedAlphaChannel);
+          return Theme.of(context).textTheme.bodyLarge!.copyWith(color: color);
+        }),
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith((
+          Set<WidgetState> states,
+        ) {
+          final Color color = states.contains(WidgetState.error)
+              ? context.colorScheme.error.withAlpha(unfocusedAlphaChannel)
+              : context.colorScheme.primary.withAlpha(unfocusedAlphaChannel);
+          return TextStyle(color: color);
+        }),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.all(Radius.circular(borderRadius)),
           borderSide: BorderSide(
