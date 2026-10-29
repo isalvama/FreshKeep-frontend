@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_app_bar.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_elevated_button.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_button.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_form_field.dart';
 import 'package:fresh_keep_frontend/shared/presentation/theme/dimens.dart';
 import 'package:go_router/go_router.dart';
@@ -117,20 +118,9 @@ class _LoginPageState extends State<LoginPage> {
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
+                    DSTextButton(
                       onPressed: () => context.go('/register'),
-                      child: Text(
-                        "Register",
-                        style: Theme.of(context).textTheme.labelLarge!.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
+                      text: "Register",
                     ),
                   ],
                 ),
