@@ -53,7 +53,7 @@ abstract class Dimens {
 
   static const double buttonHeightXSmall = 30;
   static const double buttonHeightSmall = 40;
-  static const double buttonHeightMedium = 50;
+  static const double buttonHeightMedium = 45;
   static const double buttonHeightLarge = 64;
   static const double buttonRadiusXxSmall = 2;
   static const double buttonRadiusXSmall = 4;

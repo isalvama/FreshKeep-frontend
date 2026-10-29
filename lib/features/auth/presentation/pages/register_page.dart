@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_app_bar.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_elevated_button.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_form_field.dart';
+import 'package:fresh_keep_frontend/shared/presentation/theme/dimens.dart';
+import 'package:fresh_keep_frontend/util/extensions/context_extension.dart';
 import 'package:go_router/go_router.dart';
 
 import '../bloc/form_status.dart';
@@ -100,21 +102,21 @@ class _RegisterPageState extends State<RegisterPage> {
                   labelText: 'Email',
                   validator: _validateEmail,
                 ),
-                const SizedBox(height: 16),
+                Dimens.boxXSmall,
                 DSTextFormField(
                   controller: _passwordController,
                   obscureText: true,
                   labelText: 'Password',
                   validator: _validatePassword,
                 ),
-                const SizedBox(height: 16),
+                Dimens.boxXSmall,
                 DSTextFormField(
                   controller: _confirmPasswordController,
                   obscureText: true,
                   labelText: 'Confirm password',
                   validator: _validateConfirmPassword,
                 ),
-                const SizedBox(height: 24),
+                Dimens.boxXLarge,
                 BlocBuilder<RegisterBloc, FormStatus>(
                   builder: (context, state) {
                     final isSubmitting = state is FormSubmitting;
@@ -125,10 +127,33 @@ class _RegisterPageState extends State<RegisterPage> {
                     );
                   },
                 ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => context.go('/login'),
-                  child: const Text('Already have an account? Log in'),
+                Dimens.boxSmall,
+                Row(
+                  spacing: Dimens.marginXxSmall,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Already have an account?',
+                      style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                        color: context.colorScheme.primary,
+                      ),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => context.go('/login'),
+                      child: Text(
+                        'Log in',
+                        style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                          color: context.colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_app_bar.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_elevated_button.dart';
 import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_form_field.dart';
+import 'package:fresh_keep_frontend/shared/presentation/theme/dimens.dart';
 import 'package:go_router/go_router.dart';
 
 import '../bloc/form_status.dart';
@@ -87,14 +88,14 @@ class _LoginPageState extends State<LoginPage> {
                   keyboardType: TextInputType.emailAddress,
                   validator: _validateEmail,
                 ),
-                const SizedBox(height: 16),
+                Dimens.boxXSmall,
                 DSTextFormField(
                   labelText: 'Password',
                   controller: _passwordController,
                   obscureText: true,
                   validator: _validatePassword,
                 ),
-                const SizedBox(height: 24),
+                Dimens.boxXLarge,
                 BlocBuilder<LoginBloc, FormStatus>(
                   builder: (context, state) {
                     final isSubmitting = state is FormSubmitting;
@@ -106,9 +107,32 @@ class _LoginPageState extends State<LoginPage> {
                   },
                 ),
                 const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => context.go('/register'),
-                  child: const Text("Don't have an account? Register"),
+                Row(
+                  spacing: Dimens.marginXxSmall,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Don't have an account?",
+                      style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => context.go('/register'),
+                      child: Text(
+                        "Register",
+                        style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -27,7 +27,7 @@ abstract class ThemeFactory {
       );
 
   static ThemeData lightTheme() {
-    const defaultTextColor = AppColors.brownEarth;
+    const defaultTextColor = AppColors.brownMuted;
 
     final base = ThemeData.light().copyWith(
       disabledColor: AppColors.disabled,
@@ -39,7 +39,7 @@ abstract class ThemeFactory {
         error: AppColors.error,
         onPrimary: AppColors.white,
         onSecondary: AppColors.white,
-        onSurface: AppColors.brownDark,
+        onSurface: AppColors.brownMuted,
         onError: AppColors.white,
         brightness: Brightness.light,
       ),
