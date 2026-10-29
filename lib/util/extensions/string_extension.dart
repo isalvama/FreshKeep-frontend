@@ -9,4 +9,8 @@ extension StringExtension on String {
       return "";
     }
   }
+
+  String toTitleCase() {
+    return split(' ').map((word) => word.capitalize()).join(' ');
+  }
 }
