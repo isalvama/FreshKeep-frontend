@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fresh_keep_frontend/core/theme/app_theme.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:fresh_keep_frontend/core/errors/failures.dart';
 import 'package:fresh_keep_frontend/features/space_overview/domain/entities/move_destination.dart';
@@ -16,6 +15,7 @@ import 'package:fresh_keep_frontend/features/spaces/domain/entities/storage_spot
 import 'package:fresh_keep_frontend/features/spaces/domain/repositories/space_repository.dart';
 import 'package:fresh_keep_frontend/features/spaces/domain/usecases/get_user_spaces_usecase.dart';
 import 'package:fresh_keep_frontend/features/spaces/presentation/bloc/spaces_bloc.dart';
+import 'package:fresh_keep_frontend/shared/presentation/theme/theme_factory.dart';
 
 /// Answers each `getUserSpaces` call with the next entry of [results]; a
 /// `null` entry waits on [pending].
@@ -86,7 +86,8 @@ Future<void> _pumpOpener(
       child: MaterialApp(
         // The app's theme: its list tile title style differs from the 18px
         // one the space rows use, which once broke switching levels.
-        theme: AppTheme.light,
+        theme: ThemeFactory.lightTheme(),
+        darkTheme: ThemeFactory.darkTheme(),
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(

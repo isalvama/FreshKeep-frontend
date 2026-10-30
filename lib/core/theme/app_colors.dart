@@ -8,6 +8,7 @@ abstract class AppColors {
   // Brown — primary actions and text
   static const brown = Color(0xFF8E5B3F);
   static const brownDark = Color(0xFF4F3422);
+  static const brownEarth = Color(0xFF3c2a2b);
   static const brownMuted = Color(0xFF7A6558);
   static const brownLight = Color(0xFFEFE4DB);
 
@@ -28,4 +29,8 @@ abstract class AppColors {
   static const expiredLight = Color(0xFFF6DEDA);
   static const expiringSoon = Color(0xFF7A5C00);
   static const expiringSoonLight = Color(0xFFFCEFC2);
+
+  // Shared
+  static const black = Color(0xFF000000);
+  static const disabled = Color(0xFFB5B5B5);
 }

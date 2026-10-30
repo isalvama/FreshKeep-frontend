@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_app_bar.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_elevated_button.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_button.dart';
+import 'package:fresh_keep_frontend/shared/presentation/design_system/views/ds_text_form_field.dart';
+import 'package:fresh_keep_frontend/shared/presentation/theme/dimens.dart';
 import 'package:go_router/go_router.dart';
 
 import '../bloc/form_status.dart';
@@ -44,18 +49,18 @@ class _LoginPageState extends State<LoginPage> {
   void _submit(BuildContext context) {
     if (_formKey.currentState!.validate()) {
       context.read<LoginBloc>().add(
-            LoginSubmitted(
-              email: _emailController.text.trim(),
-              password: _passwordController.text,
-            ),
-          );
+        LoginSubmitted(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Log in')),
+      appBar: DSAppBar(title: "Log In"),
       body: BlocListener<LoginBloc, FormStatus>(
         listener: (context, state) {
           // The app-wide messenger keeps the SnackBar on screen while the
@@ -65,9 +70,9 @@ class _LoginPageState extends State<LoginPage> {
               SnackBar(content: Text('Logged in as ${state.user.email}')),
             );
           } else if (state is FormFailure) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.message)));
           }
         },
         child: Padding(
@@ -78,39 +83,46 @@ class _LoginPageState extends State<LoginPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextFormField(
+                DSTextFormField(
+                  labelText: 'Email',
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email'),
                   validator: _validateEmail,
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
+                Dimens.boxXSmall,
+                DSTextFormField(
+                  labelText: 'Password',
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Password'),
                   validator: _validatePassword,
                 ),
-                const SizedBox(height: 24),
+                Dimens.boxXLarge,
                 BlocBuilder<LoginBloc, FormStatus>(
                   builder: (context, state) {
                     final isSubmitting = state is FormSubmitting;
-                    return ElevatedButton(
-                      onPressed: isSubmitting ? null : () => _submit(context),
-                      child: isSubmitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Log in'),
+                    return DSElevatedButton(
+                      text: "Log in",
+                      isSubmitting: isSubmitting,
+                      submit: _submit,
                     );
                   },
                 ),
                 const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => context.go('/register'),
-                  child: const Text("Don't have an account? Register"),
+                Row(
+                  spacing: Dimens.marginXxSmall,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Don't have an account?",
+                      style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    DSTextButton(
+                      onPressed: () => context.go('/register'),
+                      text: "Register",
+                    ),
+                  ],
                 ),
               ],
             ),
