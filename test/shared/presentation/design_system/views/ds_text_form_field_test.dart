@@ -8,7 +8,8 @@ Future<void> _pumpField(
   String? Function(String?)? validator,
   TextInputType? keyboardType,
   bool obscureText = false,
-  String labelText = 'Email',
+  required String labelText,
+  bool labelTextToTitleCase = true,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -19,6 +20,7 @@ Future<void> _pumpField(
           keyboardType: keyboardType,
           obscureText: obscureText,
           labelText: labelText,
+          labelTextToTitleCase: labelTextToTitleCase,
         ),
       ),
     ),
@@ -47,21 +49,42 @@ Future<void> _pumpForm(
 }
 
 void main() {
-  testWidgets('shows the label and initial controller value', (tester) async {
-    final controller = TextEditingController(text: 'ana@example.com');
-    addTearDown(controller.dispose);
+  testWidgets(
+    'shows the label in title case by default and initial controller value',
+    (tester) async {
+      final controller = TextEditingController(text: 'ana@example.com');
+      addTearDown(controller.dispose);
 
-    await _pumpField(tester, controller: controller);
+      await _pumpField(tester, controller: controller, labelText: "first name");
 
-    expect(find.widgetWithText(TextFormField, 'Email'), findsOneWidget);
-    expect(find.text('ana@example.com'), findsOneWidget);
-  });
+      expect(find.widgetWithText(TextFormField, 'First Name'), findsOneWidget);
+      expect(find.text('ana@example.com'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'shows the label not in title case when labelToTitleCase is set to false',
+    (tester) async {
+      final controller = TextEditingController(text: 'ana@example.com');
+      addTearDown(controller.dispose);
+
+      await _pumpField(
+        tester,
+        controller: controller,
+        labelText: "first name",
+        labelTextToTitleCase: false,
+      );
+
+      expect(find.widgetWithText(TextFormField, 'first name'), findsOneWidget);
+      expect(find.text('ana@example.com'), findsOneWidget);
+    },
+  );
 
   testWidgets('updates the controller when text is entered', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
-    await _pumpField(tester, controller: controller);
+    await _pumpField(tester, controller: controller, labelText: "email");
 
     await tester.enterText(find.byType(TextFormField), 'ana@example.com');
 
@@ -82,7 +105,11 @@ void main() {
   testWidgets('passes keyboardType to the underlying text field', (
     tester,
   ) async {
-    await _pumpField(tester, keyboardType: TextInputType.emailAddress);
+    await _pumpField(
+      tester,
+      keyboardType: TextInputType.emailAddress,
+      labelText: 'email',
+    );
 
     expect(
       tester.widget<EditableText>(find.byType(EditableText)).keyboardType,

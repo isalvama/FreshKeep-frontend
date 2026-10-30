@@ -16,11 +16,11 @@ final Finder _loadingProgressIndicator = find.descendant(
 final Finder _button = find.byType(DSElevatedButton);
 
 void main() {
-  testWidgets('shows the text by default', (tester) async {
+  testWidgets('shows the text in title case by default', (tester) async {
     await _pump(
       tester,
       DSElevatedButton(
-        text: 'Log In',
+        text: 'log in',
         isSubmitting: false,
         submit: (context) {},
       ),
@@ -29,6 +29,24 @@ void main() {
     expect(find.text('Log In'), findsOneWidget);
     expect(_loadingProgressIndicator, findsNothing);
   });
+
+  testWidgets(
+    'shows the text without title case when textToTitleCase is set to false',
+    (tester) async {
+      await _pump(
+        tester,
+        DSElevatedButton(
+          text: 'log in',
+          textInTitleCase: false,
+          isSubmitting: false,
+          submit: (context) {},
+        ),
+      );
+
+      expect(find.text('log in'), findsOneWidget);
+      expect(_loadingProgressIndicator, findsNothing);
+    },
+  );
 
   testWidgets('shows a loading progress indicator when isSubmitting is true', (
     tester,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fresh_keep_frontend/shared/presentation/theme/dimens.dart';
 import 'package:fresh_keep_frontend/util/extensions/context_extension.dart';
+import 'package:fresh_keep_frontend/util/extensions/string_extension.dart';
 
 class DSTextFormField extends StatefulWidget {
   final TextEditingController controller;
@@ -8,6 +9,7 @@ class DSTextFormField extends StatefulWidget {
   final TextInputType? keyboardType;
   final bool obscureText;
   final String labelText;
+  final bool labelTextToTitleCase;
 
   const DSTextFormField({
     super.key,
@@ -16,6 +18,7 @@ class DSTextFormField extends StatefulWidget {
     this.obscureText = false,
     this.keyboardType = TextInputType.text,
     required this.labelText,
+    this.labelTextToTitleCase = true,
   });
 
   @override
@@ -55,7 +58,9 @@ class _DSTextFormFieldState extends State<DSTextFormField> {
         ),
         filled: true,
         fillColor: Theme.of(context).colorScheme.onPrimary,
-        labelText: widget.labelText,
+        labelText: widget.labelTextToTitleCase
+            ? widget.labelText.toTitleCase()
+            : widget.labelText,
         labelStyle: WidgetStateTextStyle.resolveWith((Set<WidgetState> states) {
           final Color color = states.contains(WidgetState.error)
               ? context.colorScheme.error.withAlpha(unfocusedAlphaChannel)

@@ -8,9 +8,8 @@ final _backButton = find.descendant(
   matching: find.byType(IconButton),
 );
 
-Future<void> _pump(WidgetTester tester, DSAppBar appBar) => tester.pumpWidget(
-  MaterialApp(home: Scaffold(appBar: appBar)),
-);
+Future<void> _pump(WidgetTester tester, DSAppBar appBar) =>
+    tester.pumpWidget(MaterialApp(home: Scaffold(appBar: appBar)));
 
 /// Opens a second page with [appBar] on top of a first page, so the app bar
 /// has a route to pop back to.
@@ -21,9 +20,7 @@ Future<void> _pumpOnPushedPage(WidgetTester tester, DSAppBar appBar) async {
         builder: (context) => Scaffold(
           body: TextButton(
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => Scaffold(appBar: appBar),
-              ),
+              MaterialPageRoute<void>(builder: (_) => Scaffold(appBar: appBar)),
             ),
             child: const Text('First page'),
           ),
@@ -31,16 +28,29 @@ Future<void> _pumpOnPushedPage(WidgetTester tester, DSAppBar appBar) async {
       ),
     ),
   );
+
   await tester.tap(find.text('First page'));
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('shows the title', (tester) async {
-    await _pump(tester, const DSAppBar(title: 'Log In'));
+  testWidgets('shows the title in title case by default', (tester) async {
+    await _pump(tester, const DSAppBar(title: 'log in'));
 
     expect(find.text('Log In'), findsOneWidget);
   });
+
+  testWidgets(
+    'shows the title without title case when titleInTitleCase is set to false',
+    (tester) async {
+      await _pump(
+        tester,
+        const DSAppBar(title: 'log in', titleInTitleCase: false),
+      );
+
+      expect(find.text('log in'), findsOneWidget);
+    },
+  );
 
   testWidgets('has no back button by default', (tester) async {
     await _pump(tester, const DSAppBar(title: 'Log In'));
@@ -58,11 +68,7 @@ void main() {
     var backPressed = 0;
     await _pumpOnPushedPage(
       tester,
-      DSAppBar(
-        title: 'Log In',
-        backEnabled: true,
-        onBack: () => backPressed++,
-      ),
+      DSAppBar(title: 'Log In', backEnabled: true, onBack: () => backPressed++),
     );
 
     await tester.tap(_backButton);
